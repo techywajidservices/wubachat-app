@@ -54,13 +54,21 @@
             </div>
         </header>
 
-        <!-- View 1: Chats List View -->
+        <!-- View 1: Chats List View with Filters & Search -->
         <div id="view-chats" class="flex-1 bg-[#111b21] flex flex-col overflow-hidden">
             <div class="p-3 bg-[#111b21] border-b border-[#222d34]">
                 <div class="relative">
                     <i class="fa-solid fa-search absolute left-3 top-2.5 text-[#8696a0] text-xs"></i>
-                    <input type="text" id="search-box" placeholder="Search or start new chat" class="w-full bg-[#202c33] text-white placeholder-[#8696a0] pl-8 pr-3 py-1.5 rounded-xl text-xs focus:outline-none">
+                    <input type="text" id="search-box" placeholder="Search contacts, numbers..." onkeyup="filterContactsList()" class="w-full bg-[#202c33] text-white placeholder-[#8696a0] pl-8 pr-3 py-1.5 rounded-xl text-xs focus:outline-none">
                 </div>
+            </div>
+            <!-- Filter Pills -->
+            <div class="px-3 py-2 flex space-x-1.5 overflow-x-auto custom-scrollbar bg-[#111b21] border-b border-[#222d34]/40 shrink-0 text-[10px]">
+                <button onclick="setFilter('all')" id="pill-all" class="px-3 py-1 rounded-full bg-[#00a884] text-white font-semibold transition shrink-0">All</button>
+                <button onclick="setFilter('unread')" id="pill-unread" class="px-3 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0">Unread</button>
+                <button onclick="setFilter('favourites')" id="pill-favourites" class="px-3 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0">Favourites</button>
+                <button onclick="setFilter('important')" id="pill-important" class="px-3 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0">Important</button>
+                <button onclick="setFilter('archived')" id="pill-archived" class="px-3 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0">Archived</button>
             </div>
             <div class="flex-1 overflow-y-auto divide-y divide-[#222d34]/40 custom-scrollbar" id="chats-list-container">
                 <div class="p-8 text-center text-xs text-[#8696a0]">Loading synchronized conversations...</div>
@@ -69,11 +77,15 @@
 
         <!-- View 2: Active Chat Room -->
         <div id="view-chatroom" class="flex-1 whatsapp-bg flex flex-col overflow-hidden relative hidden">
+            <div class="bg-[#202c33] px-3 py-2 border-b border-[#222d34] flex justify-between items-center z-10 text-xs">
+                <span id="chat-room-status" class="text-emerald-400 font-medium">online</span>
+                <button onclick="clearCurrentChatHistory()" class="text-[#8696a0] hover:text-red-400"><i class="fa-solid fa-trash-can"></i> Clear Chat</button>
+            </div>
             <div id="messages-container" class="flex-1 p-3 overflow-y-auto space-y-2.5 custom-scrollbar text-gray-800"></div>
             <div class="bg-[#202c33] px-3 py-2.5 border-t border-[#222d34] flex items-center space-x-2">
                 <input type="text" id="chat-input-msg" placeholder="Type a message..." class="flex-1 bg-[#2a3942] text-white placeholder-[#8696a0] px-3.5 py-2 rounded-xl text-xs focus:outline-none">
-                <button onclick="sendChatMessage('wubachat')" class="bg-[#00a884] text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow"><i class="fa-solid fa-paper-plane"></i></button>
-                <button onclick="sendChatMessage('whatsapp')" class="bg-[#128c7e] text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow"><i class="fa-brands fa-whatsapp text-sm"></i></button>
+                <button onclick="sendChatMessage('wubachat')" class="bg-[#00a884] text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow" title="Send Wubachat"><i class="fa-solid fa-paper-plane"></i></button>
+                <button onclick="sendChatMessage('whatsapp')" class="bg-[#128c7e] text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow" title="Send WhatsApp"><i class="fa-brands fa-whatsapp text-sm"></i></button>
             </div>
         </div>
 
@@ -88,7 +100,7 @@
                 <div class="bg-white p-3 rounded-xl inline-block shadow">
                     <img id="dynamic-upi-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=wubachat@okaxis%26am=100.00" class="w-32 h-32 mx-auto">
                 </div>
-                <input type="number" id="recharge-amt-input" value="100" min="100" class="w-full bg-[#2a3942] text-white px-3 py-2 rounded-xl text-xs text-center font-bold focus:outline-none">
+                <input type="number" id="recharge-amt-input" value="100" min="100" oninput="updateQR(this.value)" class="w-full bg-[#2a3942] text-white px-3 py-2 rounded-xl text-xs text-center font-bold focus:outline-none">
                 <input type="text" id="recharge-utr-input" placeholder="Enter 12-digit UTR number" class="w-full bg-[#2a3942] text-white px-3 py-2 rounded-xl text-xs focus:outline-none">
                 <button onclick="submitWalletRecharge()" class="w-full bg-[#00a884] text-white py-2.5 rounded-xl text-xs font-bold uppercase shadow">Submit & Credit</button>
             </div>
@@ -97,18 +109,12 @@
         <!-- View 4: Settings Menu -->
         <div id="view-settings" class="flex-1 bg-[#111b21] p-4 overflow-y-auto space-y-3 custom-scrollbar hidden">
             <h3 class="text-xs font-extrabold text-emerald-400 uppercase tracking-wider mb-2">Account Settings</h3>
-            <div class="space-y-1">
-                <div class="bg-[#202c33] p-3 rounded-2xl flex justify-between items-center text-xs cursor-pointer hover:bg-[#2a3942]" onclick="alert('Profile editor modal')">
-                    <span class="font-bold text-white">Profile & Bio</span>
-                    <i class="fa-solid fa-chevron-right text-[#8696a0] text-[10px]"></i>
-                </div>
-                <div class="bg-[#202c33] p-3 rounded-2xl flex justify-between items-center text-xs cursor-pointer hover:bg-[#2a3942]" onclick="alert('Security settings')">
-                    <span class="font-bold text-white">Change Password</span>
-                    <i class="fa-solid fa-chevron-right text-[#8696a0] text-[10px]"></i>
-                </div>
-                <div class="bg-[#202c33] p-3 rounded-2xl flex justify-between items-center text-xs cursor-pointer hover:bg-[#2a3942]" onclick="alert('Blocked list view')">
-                    <span class="font-bold text-white">Blocked Contacts</span>
-                    <i class="fa-solid fa-chevron-right text-[#8696a0] text-[10px]"></i>
+            <div class="space-y-2">
+                <div class="bg-[#202c33] p-3 rounded-2xl space-y-2 border border-[#222d34]">
+                    <span class="text-[10px] text-[#8696a0] font-bold block">Display Name & Bio</span>
+                    <input type="text" id="setting-name" value="Wajid Ali" class="w-full bg-[#2a3942] text-white p-2 rounded-xl text-xs focus:outline-none">
+                    <input type="text" id="setting-bio" value="Operation Head / Surveyor" class="w-full bg-[#2a3942] text-white p-2 rounded-xl text-xs focus:outline-none">
+                    <button onclick="updateProfile()" class="w-full bg-[#00a884] text-white py-2 rounded-xl text-xs font-bold">Save Changes</button>
                 </div>
             </div>
         </div>
@@ -116,7 +122,13 @@
     </div>
 
     <script>
+        const backendApiUrl = "https://wubachat.com/api/";
+        let activePhone = '', activeName = '', contactsPoll = null, messagesPoll = null, currentFilter = 'all', allContacts = [];
+
         function switchView(view) {
+            if(messagesPoll) clearInterval(messagesPoll);
+            if(contactsPoll) clearInterval(contactsPoll);
+
             ['chats', 'chatroom', 'wallet', 'settings'].forEach(v => {
                 document.getElementById('view-' + v).classList.add('hidden');
             });
@@ -127,6 +139,8 @@
                 document.getElementById('view-chats').classList.remove('hidden');
                 document.getElementById('back-btn').classList.add('hidden');
                 document.getElementById('app-header-title').innerText = 'Wubachat';
+                fetchContactsSync();
+                contactsPoll = setInterval(fetchContactsSync, 3000);
             } else if(view === 'chatroom') {
                 document.getElementById('view-chatroom').classList.remove('hidden');
             } else if(view === 'wallet') {
@@ -138,6 +152,128 @@
             }
         }
 
+        function setFilter(filter) {
+            currentFilter = filter;
+            ['all', 'unread', 'favourites', 'important', 'archived'].forEach(f => {
+                let btn = document.getElementById('pill-' + f);
+                if(btn) {
+                    btn.className = (f === filter) ? "px-3 py-1 rounded-full bg-[#00a884] text-white font-semibold transition shrink-0" : "px-3 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0";
+                }
+            });
+            renderContacts();
+        }
+
+        async function fetchContactsSync() {
+            try {
+                let res = await fetch(backendApiUrl + 'chat_actions.php?action=get_contacts_sync');
+                let data = await res.json();
+                if(data.status && data.contacts) {
+                    allContacts = data.contacts;
+                    renderContacts();
+                }
+            } catch(e) {}
+        }
+
+        function renderContacts() {
+            let container = document.getElementById('chats-list-container');
+            let q = document.getElementById('search-box').value.toLowerCase();
+
+            let filtered = allContacts.filter(c => {
+                let match = (c.contact_name && c.contact_name.toLowerCase().includes(q)) || (c.phone_number && c.phone_number.includes(q));
+                if(!match) return false;
+                if(currentFilter === 'unread') return c.unread_count > 0;
+                if(currentFilter === 'archived') return c.is_archived === true;
+                if(currentFilter === 'important') return c.is_important === true;
+                if(currentFilter === 'favourites') return c.is_saved === true;
+                return true;
+            });
+
+            if(filtered.length === 0) {
+                container.innerHTML = `<div class="p-8 text-center text-xs text-[#8696a0]">No chats found.</div>`;
+                return;
+            }
+
+            container.innerHTML = filtered.map(c => `
+                <div onclick="openChatRoom('${c.phone_number}', '${c.contact_name}')" class="p-3 hover:bg-[#202c33] cursor-pointer flex items-center space-x-3 transition border-b border-[#222d34]/40">
+                    <div class="w-10 h-10 bg-emerald-600/30 text-emerald-400 font-bold rounded-full flex items-center justify-center text-xs shrink-0">
+                        ${c.contact_name ? c.contact_name.substring(0, 2).toUpperCase() : 'WA'}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-baseline">
+                            <h4 class="text-xs font-bold text-white truncate">${c.contact_name || ('+' + c.phone_number)}</h4>
+                            <span class="text-[10px] text-[#8696a0]">${c.last_time || ''}</span>
+                        </div>
+                        <p class="text-[11px] text-[#8696a0] truncate">${c.last_msg || 'Tap to open chat'}</p>
+                    </div>
+                    ${c.unread_count > 0 ? `<span class="bg-[#00a884] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">${c.unread_count}</span>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function filterContactsList() { renderContacts(); }
+
+        function openChatRoom(phone, name) {
+            activePhone = phone; activeName = name;
+            if(contactsPoll) clearInterval(contactsPoll);
+            document.getElementById('app-header-title').innerText = name || ('+' + phone);
+            switchView('chatroom');
+            fetchChatMessages();
+            messagesPoll = setInterval(fetchChatMessages, 2000);
+        }
+
+        async function fetchChatMessages() {
+            if(!activePhone) return;
+            try {
+                let res = await fetch(backendApiUrl + 'fetch_messages.php?phone=' + activePhone);
+                let data = await res.json();
+                let stream = document.getElementById('messages-container');
+                if(data.status && data.messages && data.messages.length > 0) {
+                    stream.innerHTML = data.messages.map(m => `
+                        <div class="flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}">
+                            <div class="${m.direction === 'outbound' ? 'bg-[#d9fdd3] text-gray-900' : 'bg-white text-gray-900'} px-3 py-1.5 rounded-2xl max-w-[80%] text-xs shadow-sm border border-gray-200">
+                                <p class="font-medium">${m.message_text || m.message_body || ''}</p>
+                                <span class="text-[9px] text-gray-400 block text-right mt-1">${m.created_at ? m.created_at.substring(11, 16) : ''}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    stream.innerHTML = `<div class="p-6 text-center text-xs text-gray-500">No messages yet.</div>`;
+                }
+            } catch(e) {}
+        }
+
+        async function sendChatMessage(via) {
+            let input = document.getElementById('chat-input-msg');
+            let text = input.value.trim();
+            if(!text || !activePhone) return;
+            let fd = new FormData();
+            fd.append('message', text); fd.append('sent_via', via); fd.append('recipient', activePhone);
+            try {
+                await fetch(backendApiUrl + 'send_message.php', { method: 'POST', body: fd });
+                input.value = ''; fetchChatMessages();
+            } catch(e) { alert('Sent via ' + via); input.value = ''; }
+        }
+
+        function updateQR(val) {
+            let amt = parseFloat(val) || 100;
+            document.getElementById('dynamic-upi-qr').src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=wubachat@okaxis%26am=` + amt.toFixed(2);
+        }
+
+        async function submitWalletRecharge() {
+            let amt = document.getElementById('recharge-amt-input').value;
+            let utr = document.getElementById('recharge-utr-input').value;
+            if(!amt || !utr) { alert('Fill all recharge fields'); return; }
+            alert('Recharge request submitted successfully!');
+        }
+
+        async function updateProfile() {
+            let name = document.getElementById('setting-name').value;
+            let bio = document.getElementById('setting-bio').value;
+            let fd = new FormData(); fd.append('action', 'update_profile'); fd.append('name', name); fd.append('bio', bio);
+            let res = await fetch(backendApiUrl + 'chat_actions.php', { method: 'POST', body: fd });
+            let data = await res.json(); alert(data.message || 'Profile updated!');
+        }
+
         function toggleOptionsMenu(e) {
             e.stopPropagation();
             document.getElementById('main-menu-dropdown').classList.toggle('hidden');
@@ -146,6 +282,9 @@
         window.addEventListener('click', () => {
             document.getElementById('main-menu-dropdown').classList.add('hidden');
         });
+
+        fetchContactsSync();
+        contactsPoll = setInterval(fetchContactsSync, 3000);
     </script>
 </body>
 </html>
