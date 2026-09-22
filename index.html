@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wubachat - WhatsApp Mobile App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b141a; color: #e9edef; }
+        .whatsapp-bg {
+            background-color: #0b141a;
+            background-image: radial-gradient(#1f2c34 0.75px, transparent 0.75px);
+            background-size: 20px 20px;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #222d34; border-radius: 4px; }
+    </style>
+</head>
+<body class="h-screen flex flex-col justify-center items-center overflow-hidden">
+
+    <div class="w-full max-w-md h-full sm:h-[92vh] bg-[#111b21] sm:rounded-3xl shadow-2xl flex flex-col border border-[#222d34] overflow-hidden relative">
+        
+        <!-- App Header with 3D Logo -->
+        <header class="bg-[#202c33] px-4 py-3 flex justify-between items-center border-b border-[#222d34] z-20">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center p-1 border border-emerald-500/30 shadow-lg">
+                    <img src="logo.png" alt="Wubachat" class="w-full h-full object-contain" onerror="this.src='https://placehold.co/40x40/00a884/ffffff?text=W'">
+                </div>
+                <div>
+                    <h1 class="text-sm font-extrabold text-white tracking-wide" id="header-title">Wubachat</h1>
+                    <span class="text-[10px] text-emerald-400 font-semibold" id="connection-status">Live Connected (wubachat.com)</span>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3 text-[#aebac1]">
+                <button title="Back to Chats" onclick="switchView('chats')" class="hover:text-white transition" id="back-btn" style="display:none;"><i class="fa-solid fa-arrow-left text-base"></i></button>
+                <button title="Scan to Web / QR Login" onclick="switchView('qr')" class="hover:text-emerald-400 transition"><i class="fa-solid fa-qrcode text-base"></i></button>
+                <button title="Settings" onclick="switchView('settings')" class="hover:text-white transition"><i class="fa-solid fa-gear text-base"></i></button>
+            </div>
+        </header>
+
+        <!-- 1. Contacts View -->
+        <div id="view-chats" class="flex-1 bg-[#111b21] flex flex-col overflow-hidden">
+            <div class="p-3 border-b border-[#222d34]">
+                <input type="text" placeholder="Search or start new chat..." class="w-full bg-[#202c33] text-white placeholder-[#8696a0] px-3.5 py-2 rounded-xl text-xs focus:outline-none">
+            </div>
+            <div class="flex-1 overflow-y-auto divide-y divide-[#222d34]/60 custom-scrollbar">
+                <div onclick="openChat('9876543210', 'Paramount Support')" class="p-3.5 hover:bg-[#202c33] cursor-pointer flex items-center space-x-3 transition">
+                    <div class="w-11 h-11 bg-emerald-600/30 text-emerald-400 font-bold rounded-full flex items-center justify-center text-sm">PS</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-baseline">
+                            <h4 class="text-xs font-bold text-white truncate">Paramount Support</h4>
+                            <span class="text-[10px] text-[#8696a0]">Live</span>
+                        </div>
+                        <p class="text-[11px] text-[#8696a0] truncate">Tap to open real-time secure chat...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Active Chat View -->
+        <div id="view-chat-room" class="flex-1 whatsapp-bg flex flex-col overflow-hidden relative" style="display:none;">
+            <div id="messages-stream" class="flex-1 p-4 overflow-y-auto space-y-3 custom-scrollbar"></div>
+
+            <div class="bg-[#202c33] px-3 py-2.5 border-t border-[#222d34] flex items-center space-x-2">
+                <button class="text-[#8696a0] hover:text-white text-base px-1"><i class="fa-regular fa-face-smile"></i></button>
+                <button class="text-[#8696a0] hover:text-white text-base px-1"><i class="fa-solid fa-paperclip"></i></button>
+                <input type="text" id="message-input" placeholder="Type a message..." class="flex-1 bg-[#2a3942] text-white placeholder-[#8696a0] px-3.5 py-2 rounded-xl text-xs focus:outline-none">
+                
+                <div class="flex items-center space-x-1 shrink-0">
+                    <button onclick="sendMessage('wubachat')" class="bg-[#00a884] hover:bg-[#008f6f] text-white px-2.5 py-2 rounded-xl text-[11px] font-bold shadow transition" title="Send Wubachat Free">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                    <button onclick="sendMessage('whatsapp')" class="bg-[#128c7e] hover:bg-[#075e54] text-white px-2.5 py-2 rounded-xl text-[11px] font-bold shadow transition" title="Send Official WhatsApp">
+                        <i class="fa-brands fa-whatsapp text-sm"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Settings View -->
+        <div id="view-settings" class="flex-1 bg-[#111b21] p-4 overflow-y-auto space-y-4 custom-scrollbar" style="display:none;">
+            <div class="flex items-center space-x-4 bg-[#202c33] p-4 rounded-2xl border border-[#222d34]">
+                <div class="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center p-1 border border-emerald-500/30">
+                    <img src="logo.png" class="w-full h-full object-contain">
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white">Wajid Ali</h3>
+                    <p class="text-xs text-emerald-400">Operation Head / Surveyor</p>
+                    <span class="text-[10px] text-[#8696a0]">Available on wubachat.com</span>
+                </div>
+            </div>
+            <div class="bg-[#202c33] rounded-2xl p-4 border border-[#222d34] space-y-3">
+                <h4 class="text-xs font-bold text-[#8696a0] uppercase tracking-wider">Preferences</h4>
+                <div class="flex justify-between items-center text-xs py-2 border-b border-[#2a3942]">
+                    <span>App Language</span>
+                    <select class="bg-[#2a3942] text-white px-2 py-1 rounded-lg text-xs border-none focus:outline-none">
+                        <option>English</option>
+                        <option>Hindi</option>
+                        <option>Urdu</option>
+                    </select>
+                </div>
+                <div class="flex justify-between items-center text-xs py-2">
+                    <span>Dark Theme 3D Look</span>
+                    <input type="checkbox" checked class="accent-[#00a884]">
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Scan to Web (QR Login) View -->
+        <div id="view-qr" class="flex-1 bg-[#111b21] p-6 flex flex-col items-center justify-center text-center space-y-4" style="display:none;">
+            <div class="bg-white p-4 rounded-2xl shadow-xl">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://wubachat.com/login" class="w-36 h-36">
+            </div>
+            <h3 class="text-sm font-bold text-white">Scan to link Wubachat Web</h3>
+            <p class="text-xs text-[#8696a0]">Point your phone camera or web login scanner to connect instantly with wubachat.com</p>
+        </div>
+
+    </div>
+
+    <script>
+        const backendUrl = "https://wubachat.com/api/";
+        let activePhone = '';
+        let pollTimer = null;
+
+        function switchView(view) {
+            if(pollTimer) clearInterval(pollTimer);
+            document.getElementById('view-chats').style.display = 'none';
+            document.getElementById('view-chat-room').style.display = 'none';
+            document.getElementById('view-settings').style.display = 'none';
+            document.getElementById('view-qr').style.display = 'none';
+            document.getElementById('back-btn').style.display = 'block';
+
+            if(view === 'chats') {
+                document.getElementById('view-chats').style.display = 'flex';
+                document.getElementById('back-btn').style.display = 'none';
+                document.getElementById('header-title').innerText = 'Wubachat';
+            } else if(view === 'settings') {
+                document.getElementById('view-settings').style.display = 'block';
+                document.getElementById('header-title').innerText = 'Settings';
+            } else if(view === 'qr') {
+                document.getElementById('view-qr').style.display = 'flex';
+                document.getElementById('header-title').innerText = 'QR Link Web';
+            }
+        }
+
+        function openChat(phone, name) {
+            activePhone = phone;
+            document.getElementById('header-title').innerText = name;
+            document.getElementById('back-btn').style.display = 'block';
+            document.getElementById('view-chats').style.display = 'none';
+            document.getElementById('view-chat-room').style.display = 'flex';
+            
+            fetchMessages();
+            pollTimer = setInterval(fetchMessages, 2000);
+        }
+
+        async function fetchMessages() {
+            if(!activePhone) return;
+            try {
+                let res = await fetch(backendUrl + 'fetch_messages.php?phone=' + activePhone);
+                let data = await res.json();
+                if(data.status && data.messages) {
+                    let stream = document.getElementById('messages-stream');
+                    stream.innerHTML = data.messages.map(m => `
+                        <div class="flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}">
+                            <div class="${m.direction === 'outbound' ? 'bg-[#005c4b] text-white' : 'bg-[#202c33] text-[#e9edef]'} px-3.5 py-2 rounded-2xl max-w-[80%] text-xs shadow-md border border-[#222d34] relative group">
+                                <p class="font-medium">${m.message_text}</p>
+                                <span class="text-[9px] text-[#8696a0] block text-right mt-1">${m.created_at || 'Just now'}</span>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch(e) {}
+        }
+
+        async function sendMessage(via) {
+            let input = document.getElementById('message-input');
+            let text = input.value.trim();
+            if(!text || !activePhone) return;
+
+            let fd = new FormData();
+            fd.append('message', text);
+            fd.append('sent_via', via);
+            fd.append('recipient', activePhone);
+
+            try {
+                await fetch(backendUrl + 'send_message.php', { method: 'POST', body: fd });
+                input.value = '';
+                fetchMessages();
+            } catch(e) {
+                alert('Message dispatched via ' + via);
+                input.value = '';
+            }
+        }
+    </script>
+</body>
+</html>
