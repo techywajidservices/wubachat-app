@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wubachat - WhatsApp Mobile App</title>
+    <title>Wubachat - Full Dashboard Mobile App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#111b21">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #0b141a; color: #e9edef; }
@@ -14,50 +16,77 @@
             background-image: radial-gradient(#1f2c34 0.75px, transparent 0.75px);
             background-size: 20px 20px;
         }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #222d34; border-radius: 4px; }
     </style>
 </head>
 <body class="h-screen flex flex-col justify-center items-center overflow-hidden">
 
-    <div class="w-full max-w-md h-full sm:h-[92vh] bg-[#111b21] sm:rounded-3xl shadow-2xl flex flex-col border border-[#222d34] overflow-hidden relative">
+    <div class="w-full max-w-md h-full sm:h-[94vh] bg-[#111b21] sm:rounded-3xl shadow-2xl flex flex-col border border-[#222d34] overflow-hidden relative">
         
-        <!-- App Header with 3D Logo -->
-        <header class="bg-[#202c33] px-4 py-3 flex justify-between items-center border-b border-[#222d34] z-20">
-            <div class="flex items-center space-x-3">
-                <div class="w-10 h-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center p-1 border border-emerald-500/30 shadow-lg">
+        <!-- App Header with Logo & Quick Dashboard Controls -->
+        <header class="bg-[#202c33] px-3 py-2.5 flex justify-between items-center border-b border-[#222d34] z-20">
+            <div class="flex items-center space-x-2.5 min-w-0">
+                <div class="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center p-1 border border-emerald-500/30 shrink-0">
                     <img src="logo.png" alt="Wubachat" class="w-full h-full object-contain" onerror="this.src='https://placehold.co/40x40/00a884/ffffff?text=W'">
                 </div>
-                <div>
-                    <h1 class="text-sm font-extrabold text-white tracking-wide" id="header-title">Wubachat</h1>
-                    <span class="text-[10px] text-emerald-400 font-semibold" id="connection-status">Live Synced with wubachat.com</span>
+                <div class="min-w-0">
+                    <h1 class="text-xs font-extrabold text-white truncate" id="header-title">Wubachat</h1>
+                    <span class="text-[9px] text-emerald-400 font-semibold block truncate">Meta Connected | ₹90.00</span>
                 </div>
             </div>
-            <div class="flex items-center space-x-3 text-[#aebac1]">
-                <button title="Back to Chats" onclick="switchView('chats')" class="hover:text-white transition" id="back-btn" style="display:none;"><i class="fa-solid fa-arrow-left text-base"></i></button>
-                <button title="Scan to Web / QR Login" onclick="switchView('qr')" class="hover:text-emerald-400 transition"><i class="fa-solid fa-qrcode text-base"></i></button>
-                <button title="Settings" onclick="switchView('settings')" class="hover:text-white transition"><i class="fa-solid fa-gear text-base"></i></button>
+            <div class="flex items-center space-x-2 text-[#aebac1] shrink-0">
+                <button title="Back to Chats" onclick="switchView('chats')" class="hover:text-white transition" id="back-btn" style="display:none;"><i class="fa-solid fa-arrow-left text-sm"></i></button>
+                <button title="Billing Logs" onclick="openBillingModal()" class="hover:text-emerald-400 transition text-xs"><i class="fa-solid fa-file-invoice-dollar"></i></button>
+                <button title="Scan to Web / QR Login" onclick="switchView('qr')" class="hover:text-emerald-400 transition text-xs"><i class="fa-solid fa-qrcode"></i></button>
+                <button title="Settings & Profile" onclick="switchView('settings')" class="hover:text-white transition text-xs"><i class="fa-solid fa-gear"></i></button>
             </div>
         </header>
 
-        <!-- 1. Contacts View (Dynamic Loading) -->
+        <!-- 1. Contacts View with Filters & Search -->
         <div id="view-chats" class="flex-1 bg-[#111b21] flex flex-col overflow-hidden">
-            <div class="p-3 border-b border-[#222d34]">
-                <input type="text" placeholder="Search or start new chat..." class="w-full bg-[#202c33] text-white placeholder-[#8696a0] px-3.5 py-2 rounded-xl text-xs focus:outline-none">
+            <!-- Search bar -->
+            <div class="p-2.5 border-b border-[#222d34] bg-[#111b21]">
+                <div class="relative">
+                    <i class="fa-solid fa-search absolute left-3 top-2.5 text-[#8696a0] text-xs"></i>
+                    <input type="text" id="search-contacts" placeholder="Search contacts, numbers..." onkeyup="filterContacts()" class="w-full bg-[#202c33] text-white placeholder-[#8696a0] pl-8 pr-3 py-1.5 rounded-xl text-xs focus:outline-none">
+                </div>
             </div>
+            <!-- Filter Pills -->
+            <div class="px-2.5 py-1.5 flex space-x-1.5 overflow-x-auto custom-scrollbar bg-[#111b21] border-b border-[#222d34]/40 shrink-0 text-[10px]">
+                <button onclick="setFilter('all')" id="pill-all" class="px-2.5 py-1 rounded-full bg-[#00a884] text-white font-semibold transition shrink-0">All</button>
+                <button onclick="setFilter('unread')" id="pill-unread" class="px-2.5 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0">Unread</button>
+                <button onclick="setFilter('favourites')" id="pill-favourites" class="px-2.5 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0">Favourites</button>
+                <button onclick="setFilter('important')" id="pill-important" class="px-2.5 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0">Important</button>
+                <button onclick="setFilter('archived')" id="pill-archived" class="px-2.5 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0">Archived</button>
+            </div>
+            <!-- Contacts List Container -->
             <div class="flex-1 overflow-y-auto divide-y divide-[#222d34]/60 custom-scrollbar" id="contacts-list">
-                <div class="p-6 text-center text-xs text-[#8696a0]">Loading real database contacts...</div>
+                <div class="p-6 text-center text-xs text-[#8696a0]">Loading fully synced database contacts...</div>
             </div>
         </div>
 
-        <!-- 2. Active Chat View -->
+        <!-- 2. Active Chat Room View -->
         <div id="view-chat-room" class="flex-1 whatsapp-bg flex flex-col overflow-hidden relative" style="display:none;">
-            <div id="messages-stream" class="flex-1 p-4 overflow-y-auto space-y-3 custom-scrollbar"></div>
+            <!-- Chat Action Sub-header -->
+            <div class="bg-[#202c33] px-3 py-2 border-b border-[#222d34] flex justify-between items-center z-10">
+                <div class="flex items-center space-x-2">
+                    <span id="chat-sub-status" class="text-[10px] text-emerald-400 font-medium">online</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="saveCurrentContact()" class="bg-emerald-600/30 text-emerald-400 px-2 py-0.5 rounded-lg text-[10px] font-bold border border-emerald-500/30">Save</button>
+                    <button onclick="clearCurrentChat()" class="text-[#8696a0] hover:text-red-400 text-xs px-1" title="Clear Chat"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+            </div>
 
-            <div class="bg-[#202c33] px-3 py-2.5 border-t border-[#222d34] flex items-center space-x-2">
-                <button class="text-[#8696a0] hover:text-white text-base px-1"><i class="fa-regular fa-face-smile"></i></button>
-                <button class="text-[#8696a0] hover:text-white text-base px-1"><i class="fa-solid fa-paperclip"></i></button>
-                <input type="text" id="message-input" placeholder="Type a message..." class="flex-1 bg-[#2a3942] text-white placeholder-[#8696a0] px-3.5 py-2 rounded-xl text-xs focus:outline-none">
+            <!-- Messages Stream -->
+            <div id="messages-stream" class="flex-1 p-3 overflow-y-auto space-y-2.5 custom-scrollbar"></div>
+
+            <!-- Message Input & Dual Send Buttons (Wubachat & WhatsApp) -->
+            <div class="bg-[#202c33] px-2.5 py-2 border-t border-[#222d34] flex items-center space-x-1.5">
+                <button class="text-[#8696a0] hover:text-white text-sm px-1"><i class="fa-regular fa-face-smile"></i></button>
+                <button class="text-[#8696a0] hover:text-white text-sm px-1"><i class="fa-solid fa-paperclip"></i></button>
+                <input type="text" id="message-input" placeholder="Type a message..." class="flex-1 bg-[#2a3942] text-white placeholder-[#8696a0] px-3 py-1.5 rounded-xl text-xs focus:outline-none">
                 
                 <div class="flex items-center space-x-1 shrink-0">
                     <button onclick="sendMessage('wubachat')" class="bg-[#00a884] hover:bg-[#008f6f] text-white px-2.5 py-2 rounded-xl text-[11px] font-bold shadow transition" title="Send Wubachat Free">
@@ -70,7 +99,7 @@
             </div>
         </div>
 
-        <!-- 3. Settings View -->
+        <!-- 3. Settings & Profile View -->
         <div id="view-settings" class="flex-1 bg-[#111b21] p-4 overflow-y-auto space-y-4 custom-scrollbar" style="display:none;">
             <div class="flex items-center space-x-4 bg-[#202c33] p-4 rounded-2xl border border-[#222d34]">
                 <div class="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center p-1 border border-emerald-500/35">
@@ -83,18 +112,18 @@
                 </div>
             </div>
             <div class="bg-[#202c33] rounded-2xl p-4 border border-[#222d34] space-y-3">
-                <h4 class="text-xs font-bold text-[#8696a0] uppercase tracking-wider">Preferences</h4>
+                <h4 class="text-xs font-bold text-[#8696a0] uppercase tracking-wider">Dashboard Controls</h4>
                 <div class="flex justify-between items-center text-xs py-2 border-b border-[#2a3942]">
-                    <span>App Language</span>
-                    <select class="bg-[#2a3942] text-white px-2 py-1 rounded-lg text-xs border-none focus:outline-none">
-                        <option>English</option>
-                        <option>Hindi</option>
-                        <option>Urdu</option>
-                    </select>
+                    <span>AI Auto-Bot Status</span>
+                    <span class="text-emerald-400 font-bold">OFF</span>
                 </div>
-                <div class="flex justify-between items-center text-xs py-2">
+                <div class="flex justify-between items-center text-xs py-2 border-b border-[#2a3942]">
                     <span>Dark Theme 3D Look</span>
                     <input type="checkbox" checked class="accent-[#00a884]">
+                </div>
+                <div class="flex justify-between items-center text-xs py-2">
+                    <span>App Language</span>
+                    <span class="text-xs text-white">English (Hinglish)</span>
                 </div>
             </div>
         </div>
@@ -108,13 +137,28 @@
             <p class="text-xs text-[#8696a0]">Point your phone camera or web scanner to connect instantly with wubachat.com</p>
         </div>
 
+        <!-- 5. Billing Logs Modal / Section inside App -->
+        <div id="view-billing" class="flex-1 bg-[#111b21] p-4 overflow-y-auto space-y-3 custom-scrollbar" style="display:none;">
+            <h3 class="text-xs font-bold text-white uppercase tracking-wider mb-2">Billing & Wallet Logs</h3>
+            <div class="bg-[#202c33] p-3 rounded-xl border border-[#222d34] text-xs space-y-1">
+                <div class="flex justify-between text-[#8696a0]"><span>Total Spent This Month:</span> <strong class="text-white">₹0.00</strong></div>
+                <div class="flex justify-between text-[#8696a0]"><span>Wallet Balance:</span> <strong class="text-emerald-400">₹90.00</strong></div>
+            </div>
+            <div id="billing-logs-list" class="space-y-2">
+                <div class="p-3 bg-[#202c33] rounded-xl text-center text-xs text-[#8696a0]">No recent transactions found.</div>
+            </div>
+        </div>
+
     </div>
 
     <script>
         const backendApiUrl = "https://wubachat.com/api/";
         let activePhone = '';
+        let activeName = '';
         let chatPollInterval = null;
         let contactsPollInterval = null;
+        let currentFilter = 'all';
+        let allContactsData = [];
 
         function switchView(view) {
             if(chatPollInterval) clearInterval(chatPollInterval);
@@ -124,6 +168,7 @@
             document.getElementById('view-chat-room').style.display = 'none';
             document.getElementById('view-settings').style.display = 'none';
             document.getElementById('view-qr').style.display = 'none';
+            document.getElementById('view-billing').style.display = 'none';
             document.getElementById('back-btn').style.display = 'block';
 
             if(view === 'chats') {
@@ -134,11 +179,30 @@
                 contactsPollInterval = setInterval(fetchContacts, 3000);
             } else if(view === 'settings') {
                 document.getElementById('view-settings').style.display = 'block';
-                document.getElementById('header-title').innerText = 'Settings';
+                document.getElementById('header-title').innerText = 'Settings & Profile';
             } else if(view === 'qr') {
                 document.getElementById('view-qr').style.display = 'flex';
-                document.getElementById('header-title').innerText = 'QR Link Web';
+                document.getElementById('header-title').innerText = 'Scan to Web';
+            } else if(view === 'billing') {
+                document.getElementById('view-billing').style.display = 'block';
+                document.getElementById('header-title').innerText = 'Billing Logs';
+                fetchBillingLogs();
             }
+        }
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            ['all', 'unread', 'favourites', 'important', 'archived'].forEach(f => {
+                let btn = document.getElementById('pill-' + f);
+                if(btn) {
+                    if(f === filter) {
+                        btn.className = "px-2.5 py-1 rounded-full bg-[#00a884] text-white font-semibold transition shrink-0";
+                    } else {
+                        btn.className = "px-2.5 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0";
+                    }
+                }
+            });
+            renderContactsList();
         }
 
         async function fetchContacts() {
@@ -146,36 +210,60 @@
                 let res = await fetch(backendApiUrl + 'chat_actions.php?action=get_contacts_sync');
                 let data = await res.json();
                 if(data.status && data.contacts) {
-                    let listEl = document.getElementById('contacts-list');
-                    if(data.contacts.length === 0) {
-                        listEl.innerHTML = `<div class="p-6 text-center text-xs text-[#8696a0]">No chats found in database yet.</div>`;
-                        return;
-                    }
-                    listEl.innerHTML = data.contacts.map(c => `
-                        <div onclick="openChat('${c.phone_number}', '${c.contact_name}')" class="p-3.5 hover:bg-[#202c33] cursor-pointer flex items-center space-x-3 transition border-b border-[#222d34]/40">
-                            <div class="w-11 h-11 bg-emerald-600/30 text-emerald-400 font-bold rounded-full flex items-center justify-center text-sm shrink-0">
-                                ${c.contact_name.substring(0, 2).toUpperCase()}
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="flex justify-between items-baseline">
-                                    <h4 class="text-xs font-bold text-white truncate">${c.contact_name}</h4>
-                                    <span class="text-[10px] text-[#8696a0]">${c.last_time || ''}</span>
-                                </div>
-                                <p class="text-[11px] text-[#8696a0] truncate">${c.last_msg}</p>
-                            </div>
-                            ${c.unread_count > 0 ? `<span class="bg-[#00a884] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">${c.unread_count}</span>` : ''}
-                        </div>
-                    `).join('');
+                    allContactsData = data.contacts;
+                    renderContactsList();
                 }
-            } catch(e) {
-                // Keep background running silently
+            } catch(e) {}
+        }
+
+        function renderContactsList() {
+            let listEl = document.getElementById('contacts-list');
+            let searchQuery = document.getElementById('search-contacts').value.toLowerCase();
+
+            let filtered = allContactsData.filter(c => {
+                let matchSearch = (c.contact_name && c.contact_name.toLowerCase().includes(searchQuery)) || 
+                                  (c.phone_number && c.phone_number.includes(searchQuery)) ||
+                                  (c.last_msg && c.last_msg.toLowerCase().includes(searchQuery));
+                if(!matchSearch) return false;
+
+                if(currentFilter === 'unread') return c.unread_count > 0;
+                if(currentFilter === 'archived') return c.is_archived === true;
+                if(currentFilter === 'important') return c.is_important === true;
+                if(currentFilter === 'favourites') return c.is_saved === true;
+                return true; // 'all'
+            });
+
+            if(filtered.length === 0) {
+                listEl.innerHTML = `<div class="p-6 text-center text-xs text-[#8696a0]">No chats found matching filter.</div>`;
+                return;
             }
+
+            listEl.innerHTML = filtered.map(c => `
+                <div onclick="openChat('${c.phone_number}', '${c.contact_name}')" class="p-3 hover:bg-[#202c33] cursor-pointer flex items-center space-x-3 transition border-b border-[#222d34]/40">
+                    <div class="w-10 h-10 bg-emerald-600/30 text-emerald-400 font-bold rounded-full flex items-center justify-center text-xs shrink-0">
+                        ${c.contact_name ? c.contact_name.substring(0, 2).toUpperCase() : 'WA'}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-baseline">
+                            <h4 class="text-xs font-bold text-white truncate">${c.contact_name || ('+' + c.phone_number)}</h4>
+                            <span class="text-[10px] text-[#8696a0]">${c.last_time || ''}</span>
+                        </div>
+                        <p class="text-[11px] text-[#8696a0] truncate">${c.last_msg || 'Tap to open chat'}</p>
+                    </div>
+                    ${c.unread_count > 0 ? `<span class="bg-[#00a884] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">${c.unread_count}</span>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function filterContacts() {
+            renderContactsList();
         }
 
         function openChat(phone, name) {
             activePhone = phone;
+            activeName = name;
             if(contactsPollInterval) clearInterval(contactsPollInterval);
-            document.getElementById('header-title').innerText = name;
+            document.getElementById('header-title').innerText = name || ('+' + phone);
             document.getElementById('back-btn').style.display = 'block';
             document.getElementById('view-chats').style.display = 'none';
             document.getElementById('view-chat-room').style.display = 'flex';
@@ -189,16 +277,18 @@
             try {
                 let res = await fetch(backendApiUrl + 'fetch_messages.php?phone=' + activePhone);
                 let data = await res.json();
-                if(data.status && data.messages) {
-                    let stream = document.getElementById('messages-stream');
+                let stream = document.getElementById('messages-stream');
+                if(data.status && data.messages && data.messages.length > 0) {
                     stream.innerHTML = data.messages.map(m => `
                         <div class="flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}">
-                            <div class="${m.direction === 'outbound' ? 'bg-[#005c4b] text-white' : 'bg-[#202c33] text-[#e9edef]'} px-3.5 py-2 rounded-2xl max-w-[80%] text-xs shadow-md border border-[#222d34] relative">
-                                <p class="font-medium">${m.message_text}</p>
+                            <div class="${m.direction === 'outbound' ? 'bg-[#005c4b] text-white' : 'bg-[#202c33] text-[#e9edef]'} px-3 py-1.5 rounded-2xl max-w-[80%] text-xs shadow-md border border-[#222d34] relative">
+                                <p class="font-medium">${m.message_text || m.message_body || ''}</p>
                                 <span class="text-[9px] text-[#8696a0] block text-right mt-1">${m.created_at ? m.created_at.substring(11, 16) : 'Just now'}</span>
                             </div>
                         </div>
                     `).join('');
+                } else {
+                    stream.innerHTML = `<div class="p-6 text-center text-xs text-[#8696a0]">No messages yet in this conversation.</div>`;
                 }
             } catch(e) {}
         }
@@ -223,7 +313,57 @@
             }
         }
 
-        // Initialize contacts loading on start
+        async function saveCurrentContact() {
+            let name = prompt("Enter contact name to save:", activeName);
+            if(!name) return;
+            let fd = new FormData();
+            fd.append('action', 'save_contact');
+            fd.append('name', name);
+            fd.append('phone', activePhone);
+            let res = await fetch(backendApiUrl + 'chat_actions.php', { method: 'POST', body: fd });
+            let data = await res.json();
+            if(data.status) {
+                alert('Contact saved successfully!');
+                document.getElementById('header-title').innerText = name;
+            }
+        }
+
+        async function clearCurrentChat() {
+            if(!confirm("Are you sure you want to clear this chat history?")) return;
+            let fd = new FormData();
+            fd.append('action', 'clear_chat');
+            fd.append('phone', activePhone);
+            await fetch(backendApiUrl + 'chat_actions.php', { method: 'POST', body: fd });
+            fetchMessages();
+        }
+
+        function openBillingModal() {
+            switchView('billing');
+        }
+
+        async function fetchBillingLogs() {
+            try {
+                let res = await fetch(backendApiUrl + 'chat_actions.php?action=fetch_billing_logs');
+                let data = await res.json();
+                if(data.status && data.records) {
+                    let list = document.getElementById('billing-logs-list');
+                    if(data.records.length === 0) {
+                        list.innerHTML = `<div class="p-3 bg-[#202c33] rounded-xl text-center text-xs text-[#8696a0]">No billing logs found.</div>`;
+                        return;
+                    }
+                    list.innerHTML = data.records.map(r => `
+                        <div class="p-2.5 bg-[#202c33] rounded-xl border border-[#222d34] flex justify-between items-center text-xs">
+                            <div>
+                                <span class="font-bold text-white">${r.recipient_phone}</span>
+                                <span class="text-[10px] text-[#8696a0] block">${r.created_at} (${r.sent_via})</span>
+                            </div>
+                            <span class="text-red-400 font-bold">-₹${r.cost}</span>
+                        </div>
+                    `).join('');
+                }
+            } catch(e) {}
+        }
+
         fetchContacts();
         contactsPollInterval = setInterval(fetchContacts, 3000);
     </script>
