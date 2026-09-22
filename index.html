@@ -45,14 +45,12 @@
 
         <!-- 1. Contacts View with Filters & Search -->
         <div id="view-chats" class="flex-1 bg-[#111b21] flex flex-col overflow-hidden">
-            <!-- Search bar -->
             <div class="p-2.5 border-b border-[#222d34] bg-[#111b21]">
                 <div class="relative">
                     <i class="fa-solid fa-search absolute left-3 top-2.5 text-[#8696a0] text-xs"></i>
                     <input type="text" id="search-contacts" placeholder="Search contacts, numbers..." onkeyup="filterContacts()" class="w-full bg-[#202c33] text-white placeholder-[#8696a0] pl-8 pr-3 py-1.5 rounded-xl text-xs focus:outline-none">
                 </div>
             </div>
-            <!-- Filter Pills -->
             <div class="px-2.5 py-1.5 flex space-x-1.5 overflow-x-auto custom-scrollbar bg-[#111b21] border-b border-[#222d34]/40 shrink-0 text-[10px]">
                 <button onclick="setFilter('all')" id="pill-all" class="px-2.5 py-1 rounded-full bg-[#00a884] text-white font-semibold transition shrink-0">All</button>
                 <button onclick="setFilter('unread')" id="pill-unread" class="px-2.5 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0">Unread</button>
@@ -60,7 +58,6 @@
                 <button onclick="setFilter('important')" id="pill-important" class="px-2.5 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0">Important</button>
                 <button onclick="setFilter('archived')" id="pill-archived" class="px-2.5 py-1 rounded-full bg-[#202c33] text-[#8696a0] hover:text-white font-semibold transition shrink-0">Archived</button>
             </div>
-            <!-- Contacts List Container -->
             <div class="flex-1 overflow-y-auto divide-y divide-[#222d34]/60 custom-scrollbar" id="contacts-list">
                 <div class="p-6 text-center text-xs text-[#8696a0]">Loading fully synced database contacts...</div>
             </div>
@@ -68,7 +65,6 @@
 
         <!-- 2. Active Chat Room View -->
         <div id="view-chat-room" class="flex-1 whatsapp-bg flex flex-col overflow-hidden relative" style="display:none;">
-            <!-- Chat Action Sub-header -->
             <div class="bg-[#202c33] px-3 py-2 border-b border-[#222d34] flex justify-between items-center z-10">
                 <div class="flex items-center space-x-2">
                     <span id="chat-sub-status" class="text-[10px] text-emerald-400 font-medium">online</span>
@@ -79,10 +75,8 @@
                 </div>
             </div>
 
-            <!-- Messages Stream -->
             <div id="messages-stream" class="flex-1 p-3 overflow-y-auto space-y-2.5 custom-scrollbar"></div>
 
-            <!-- Message Input & Dual Send Buttons (Wubachat & WhatsApp) -->
             <div class="bg-[#202c33] px-2.5 py-2 border-t border-[#222d34] flex items-center space-x-1.5">
                 <button class="text-[#8696a0] hover:text-white text-sm px-1"><i class="fa-regular fa-face-smile"></i></button>
                 <button class="text-[#8696a0] hover:text-white text-sm px-1"><i class="fa-solid fa-paperclip"></i></button>
@@ -99,8 +93,9 @@
             </div>
         </div>
 
-        <!-- 3. Settings & Profile View -->
+        <!-- 3. Advanced Settings & Profile View -->
         <div id="view-settings" class="flex-1 bg-[#111b21] p-4 overflow-y-auto space-y-4 custom-scrollbar" style="display:none;">
+            <!-- Profile Card -->
             <div class="flex items-center space-x-4 bg-[#202c33] p-4 rounded-2xl border border-[#222d34]">
                 <div class="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center p-1 border border-emerald-500/35">
                     <img src="logo.png" class="w-full h-full object-contain">
@@ -111,19 +106,57 @@
                     <span class="text-[10px] text-[#8696a0]">Paramount Services Pvt. Ltd.</span>
                 </div>
             </div>
+
+            <!-- Profile & Bio Update Form -->
             <div class="bg-[#202c33] rounded-2xl p-4 border border-[#222d34] space-y-3">
-                <h4 class="text-xs font-bold text-[#8696a0] uppercase tracking-wider">Dashboard Controls</h4>
-                <div class="flex justify-between items-center text-xs py-2 border-b border-[#2a3942]">
-                    <span>AI Auto-Bot Status</span>
-                    <span class="text-emerald-400 font-bold">OFF</span>
+                <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Profile Settings</h4>
+                <div>
+                    <label class="text-[10px] text-[#8696a0] block mb-1">Display Name</label>
+                    <input type="text" id="setting-name" value="Wajid Ali" class="w-full bg-[#2a3942] text-white px-3 py-1.5 rounded-xl text-xs focus:outline-none">
                 </div>
+                <div>
+                    <label class="text-[10px] text-[#8696a0] block mb-1">About / Bio</label>
+                    <input type="text" id="setting-bio" value="Operation Head / Surveyor" class="w-full bg-[#2a3942] text-white px-3 py-1.5 rounded-xl text-xs focus:outline-none">
+                </div>
+                <button onclick="updateProfileData()" class="w-full bg-[#00a884] hover:bg-[#008f6f] text-white py-2 rounded-xl text-xs font-bold transition">Update Profile</button>
+            </div>
+
+            <!-- Password Change Form -->
+            <div class="bg-[#202c33] rounded-2xl p-4 border border-[#222d34] space-y-3">
+                <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Security & Password</h4>
+                <div>
+                    <label class="text-[10px] text-[#8696a0] block mb-1">Current Password</label>
+                    <input type="password" id="old-pass" placeholder="••••••••" class="w-full bg-[#2a3942] text-white px-3 py-1.5 rounded-xl text-xs focus:outline-none">
+                </div>
+                <div>
+                    <label class="text-[10px] text-[#8696a0] block mb-1">New Password</label>
+                    <input type="password" id="new-pass" placeholder="••••••••" class="w-full bg-[#2a3942] text-white px-3 py-1.5 rounded-xl text-xs focus:outline-none">
+                </div>
+                <button onclick="updatePasswordData()" class="w-full bg-[#2a3942] hover:bg-[#37474f] text-white py-2 rounded-xl text-xs font-bold transition">Change Password</button>
+            </div>
+
+            <!-- Blocked List Section -->
+            <div class="bg-[#202c33] rounded-2xl p-4 border border-[#222d34] space-y-3">
+                <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Blocked Contacts</h4>
+                <div id="blocked-list-container" class="space-y-1 text-xs text-[#8696a0]">
+                    <p>No blocked contacts found.</p>
+                </div>
+            </div>
+
+            <!-- Preferences -->
+            <div class="bg-[#202c33] rounded-2xl p-4 border border-[#222d34] space-y-3">
+                <h4 class="text-xs font-bold text-[#8696a0] uppercase tracking-wider">Preferences</h4>
                 <div class="flex justify-between items-center text-xs py-2 border-b border-[#2a3942]">
-                    <span>Dark Theme 3D Look</span>
-                    <input type="checkbox" checked class="accent-[#00a884]">
+                    <span>App Language</span>
+                    <select class="bg-[#2a3942] text-white px-2 py-1 rounded-lg text-xs border-none focus:outline-none">
+                        <option>English</option>
+                        <option>Hindi</option>
+                        <option>Urdu</option>
+                    </select>
                 </div>
                 <div class="flex justify-between items-center text-xs py-2">
-                    <span>App Language</span>
-                    <span class="text-xs text-white">English (Hinglish)</span>
+                    <span>Dark Theme 3D Look</span>
+                    <input type="checkbox" checked class="accent-[#00a884]">
                 </div>
             </div>
         </div>
@@ -137,7 +170,7 @@
             <p class="text-xs text-[#8696a0]">Point your phone camera or web scanner to connect instantly with wubachat.com</p>
         </div>
 
-        <!-- 5. Billing Logs Modal / Section inside App -->
+        <!-- 5. Billing Logs Section inside App -->
         <div id="view-billing" class="flex-1 bg-[#111b21] p-4 overflow-y-auto space-y-3 custom-scrollbar" style="display:none;">
             <h3 class="text-xs font-bold text-white uppercase tracking-wider mb-2">Billing & Wallet Logs</h3>
             <div class="bg-[#202c33] p-3 rounded-xl border border-[#222d34] text-xs space-y-1">
@@ -180,6 +213,7 @@
             } else if(view === 'settings') {
                 document.getElementById('view-settings').style.display = 'block';
                 document.getElementById('header-title').innerText = 'Settings & Profile';
+                fetchBlockedList();
             } else if(view === 'qr') {
                 document.getElementById('view-qr').style.display = 'flex';
                 document.getElementById('header-title').innerText = 'Scan to Web';
@@ -230,7 +264,7 @@
                 if(currentFilter === 'archived') return c.is_archived === true;
                 if(currentFilter === 'important') return c.is_important === true;
                 if(currentFilter === 'favourites') return c.is_saved === true;
-                return true; // 'all'
+                return true;
             });
 
             if(filtered.length === 0) {
@@ -335,6 +369,64 @@
             fd.append('phone', activePhone);
             await fetch(backendApiUrl + 'chat_actions.php', { method: 'POST', body: fd });
             fetchMessages();
+        }
+
+        async function updateProfileData() {
+            let name = document.getElementById('setting-name').value;
+            let bio = document.getElementById('setting-bio').value;
+            let fd = new FormData();
+            fd.append('action', 'update_profile');
+            fd.append('name', name);
+            fd.append('bio', bio);
+            let res = await fetch(backendApiUrl + 'chat_actions.php', { method: 'POST', body: fd });
+            let data = await res.json();
+            alert(data.message || 'Profile updated!');
+        }
+
+        async function updatePasswordData() {
+            let old_pass = document.getElementById('old-pass').value;
+            let new_pass = document.getElementById('new-pass').value;
+            if(!old_pass || !new_pass) {
+                alert('Please fill both password fields.');
+                return;
+            }
+            let fd = new FormData();
+            fd.append('action', 'update_profile');
+            fd.append('old_password', old_pass);
+            fd.append('new_password', new_pass);
+            let res = await fetch(backendApiUrl + 'chat_actions.php', { method: 'POST', body: fd });
+            let data = await res.json();
+            alert(data.message);
+            if(data.status) {
+                document.getElementById('old-pass').value = '';
+                document.getElementById('new-pass').value = '';
+            }
+        }
+
+        async function fetchBlockedList() {
+            try {
+                let res = await fetch(backendApiUrl + 'chat_actions.php?action=get_blocked_list');
+                let data = await res.json();
+                let container = document.getElementById('blocked-list-container');
+                if(data.status && data.records && data.records.length > 0) {
+                    container.innerHTML = data.records.map(r => `
+                        <div class="flex justify-between items-center bg-[#2a3942] p-2 rounded-xl">
+                            <span>+${r.phone_number}</span>
+                            <button onclick="unblockPhone('${r.phone_number}')" class="text-red-400 font-bold text-[10px]">Unblock</button>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = `<p>No blocked contacts found.</p>`;
+                }
+            } catch(e) {}
+        }
+
+        async function unblockPhone(phone) {
+            let fd = new FormData();
+            fd.append('action', 'unblock_contact');
+            fd.append('phone', phone);
+            await fetch(backendApiUrl + 'chat_actions.php', { method: 'POST', body: fd });
+            fetchBlockedList();
         }
 
         function openBillingModal() {
