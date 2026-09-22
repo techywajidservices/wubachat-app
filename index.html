@@ -30,7 +30,7 @@
                 </div>
                 <div>
                     <h1 class="text-sm font-extrabold text-white tracking-wide" id="header-title">Wubachat</h1>
-                    <span class="text-[10px] text-emerald-400 font-semibold" id="connection-status">Live Connected (wubachat.com)</span>
+                    <span class="text-[10px] text-emerald-400 font-semibold" id="connection-status">Live Synced with wubachat.com</span>
                 </div>
             </div>
             <div class="flex items-center space-x-3 text-[#aebac1]">
@@ -40,22 +40,13 @@
             </div>
         </header>
 
-        <!-- 1. Contacts View -->
+        <!-- 1. Contacts View (Dynamic Loading) -->
         <div id="view-chats" class="flex-1 bg-[#111b21] flex flex-col overflow-hidden">
             <div class="p-3 border-b border-[#222d34]">
                 <input type="text" placeholder="Search or start new chat..." class="w-full bg-[#202c33] text-white placeholder-[#8696a0] px-3.5 py-2 rounded-xl text-xs focus:outline-none">
             </div>
-            <div class="flex-1 overflow-y-auto divide-y divide-[#222d34]/60 custom-scrollbar">
-                <div onclick="openChat('9876543210', 'Paramount Support')" class="p-3.5 hover:bg-[#202c33] cursor-pointer flex items-center space-x-3 transition">
-                    <div class="w-11 h-11 bg-emerald-600/30 text-emerald-400 font-bold rounded-full flex items-center justify-center text-sm">PS</div>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex justify-between items-baseline">
-                            <h4 class="text-xs font-bold text-white truncate">Paramount Support</h4>
-                            <span class="text-[10px] text-[#8696a0]">Live</span>
-                        </div>
-                        <p class="text-[11px] text-[#8696a0] truncate">Tap to open real-time secure chat...</p>
-                    </div>
-                </div>
+            <div class="flex-1 overflow-y-auto divide-y divide-[#222d34]/60 custom-scrollbar" id="contacts-list">
+                <div class="p-6 text-center text-xs text-[#8696a0]">Loading real database contacts...</div>
             </div>
         </div>
 
@@ -82,13 +73,13 @@
         <!-- 3. Settings View -->
         <div id="view-settings" class="flex-1 bg-[#111b21] p-4 overflow-y-auto space-y-4 custom-scrollbar" style="display:none;">
             <div class="flex items-center space-x-4 bg-[#202c33] p-4 rounded-2xl border border-[#222d34]">
-                <div class="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center p-1 border border-emerald-500/30">
+                <div class="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center p-1 border border-emerald-500/35">
                     <img src="logo.png" class="w-full h-full object-contain">
                 </div>
                 <div>
                     <h3 class="text-sm font-bold text-white">Wajid Ali</h3>
                     <p class="text-xs text-emerald-400">Operation Head / Surveyor</p>
-                    <span class="text-[10px] text-[#8696a0]">Available on wubachat.com</span>
+                    <span class="text-[10px] text-[#8696a0]">Paramount Services Pvt. Ltd.</span>
                 </div>
             </div>
             <div class="bg-[#202c33] rounded-2xl p-4 border border-[#222d34] space-y-3">
@@ -114,18 +105,21 @@
                 <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://wubachat.com/login" class="w-36 h-36">
             </div>
             <h3 class="text-sm font-bold text-white">Scan to link Wubachat Web</h3>
-            <p class="text-xs text-[#8696a0]">Point your phone camera or web login scanner to connect instantly with wubachat.com</p>
+            <p class="text-xs text-[#8696a0]">Point your phone camera or web scanner to connect instantly with wubachat.com</p>
         </div>
 
     </div>
 
     <script>
-        const backendUrl = "https://wubachat.com/api/";
+        const backendApiUrl = "https://wubachat.com/api/";
         let activePhone = '';
-        let pollTimer = null;
+        let chatPollInterval = null;
+        let contactsPollInterval = null;
 
         function switchView(view) {
-            if(pollTimer) clearInterval(pollTimer);
+            if(chatPollInterval) clearInterval(chatPollInterval);
+            if(contactsPollInterval) clearInterval(contactsPollInterval);
+
             document.getElementById('view-chats').style.display = 'none';
             document.getElementById('view-chat-room').style.display = 'none';
             document.getElementById('view-settings').style.display = 'none';
@@ -136,6 +130,8 @@
                 document.getElementById('view-chats').style.display = 'flex';
                 document.getElementById('back-btn').style.display = 'none';
                 document.getElementById('header-title').innerText = 'Wubachat';
+                fetchContacts();
+                contactsPollInterval = setInterval(fetchContacts, 3000);
             } else if(view === 'settings') {
                 document.getElementById('view-settings').style.display = 'block';
                 document.getElementById('header-title').innerText = 'Settings';
@@ -145,29 +141,61 @@
             }
         }
 
+        async function fetchContacts() {
+            try {
+                let res = await fetch(backendApiUrl + 'chat_actions.php?action=get_contacts_sync');
+                let data = await res.json();
+                if(data.status && data.contacts) {
+                    let listEl = document.getElementById('contacts-list');
+                    if(data.contacts.length === 0) {
+                        listEl.innerHTML = `<div class="p-6 text-center text-xs text-[#8696a0]">No chats found in database yet.</div>`;
+                        return;
+                    }
+                    listEl.innerHTML = data.contacts.map(c => `
+                        <div onclick="openChat('${c.phone_number}', '${c.contact_name}')" class="p-3.5 hover:bg-[#202c33] cursor-pointer flex items-center space-x-3 transition border-b border-[#222d34]/40">
+                            <div class="w-11 h-11 bg-emerald-600/30 text-emerald-400 font-bold rounded-full flex items-center justify-center text-sm shrink-0">
+                                ${c.contact_name.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex justify-between items-baseline">
+                                    <h4 class="text-xs font-bold text-white truncate">${c.contact_name}</h4>
+                                    <span class="text-[10px] text-[#8696a0]">${c.last_time || ''}</span>
+                                </div>
+                                <p class="text-[11px] text-[#8696a0] truncate">${c.last_msg}</p>
+                            </div>
+                            ${c.unread_count > 0 ? `<span class="bg-[#00a884] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">${c.unread_count}</span>` : ''}
+                        </div>
+                    `).join('');
+                }
+            } catch(e) {
+                // Keep background running silently
+            }
+        }
+
         function openChat(phone, name) {
             activePhone = phone;
+            if(contactsPollInterval) clearInterval(contactsPollInterval);
             document.getElementById('header-title').innerText = name;
             document.getElementById('back-btn').style.display = 'block';
             document.getElementById('view-chats').style.display = 'none';
             document.getElementById('view-chat-room').style.display = 'flex';
             
             fetchMessages();
-            pollTimer = setInterval(fetchMessages, 2000);
+            chatPollInterval = setInterval(fetchMessages, 2000);
         }
 
         async function fetchMessages() {
             if(!activePhone) return;
             try {
-                let res = await fetch(backendUrl + 'fetch_messages.php?phone=' + activePhone);
+                let res = await fetch(backendApiUrl + 'fetch_messages.php?phone=' + activePhone);
                 let data = await res.json();
                 if(data.status && data.messages) {
                     let stream = document.getElementById('messages-stream');
                     stream.innerHTML = data.messages.map(m => `
                         <div class="flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}">
-                            <div class="${m.direction === 'outbound' ? 'bg-[#005c4b] text-white' : 'bg-[#202c33] text-[#e9edef]'} px-3.5 py-2 rounded-2xl max-w-[80%] text-xs shadow-md border border-[#222d34] relative group">
+                            <div class="${m.direction === 'outbound' ? 'bg-[#005c4b] text-white' : 'bg-[#202c33] text-[#e9edef]'} px-3.5 py-2 rounded-2xl max-w-[80%] text-xs shadow-md border border-[#222d34] relative">
                                 <p class="font-medium">${m.message_text}</p>
-                                <span class="text-[9px] text-[#8696a0] block text-right mt-1">${m.created_at || 'Just now'}</span>
+                                <span class="text-[9px] text-[#8696a0] block text-right mt-1">${m.created_at ? m.created_at.substring(11, 16) : 'Just now'}</span>
                             </div>
                         </div>
                     `).join('');
@@ -186,7 +214,7 @@
             fd.append('recipient', activePhone);
 
             try {
-                await fetch(backendUrl + 'send_message.php', { method: 'POST', body: fd });
+                await fetch(backendApiUrl + 'send_message.php', { method: 'POST', body: fd });
                 input.value = '';
                 fetchMessages();
             } catch(e) {
@@ -194,6 +222,10 @@
                 input.value = '';
             }
         }
+
+        // Initialize contacts loading on start
+        fetchContacts();
+        contactsPollInterval = setInterval(fetchContacts, 3000);
     </script>
 </body>
 </html>
