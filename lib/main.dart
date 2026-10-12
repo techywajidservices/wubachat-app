@@ -60,29 +60,19 @@ class _AuthScreenState extends State<AuthScreen> {
     final name = nameController.text.trim();
 
     if (phone.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all required fields')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
       return;
     }
 
     setState(() => isLoading = true);
 
     try {
-      final url = Uri.parse('https://wubachat.com/api/app_auth.php');
-      final response = await http.post(
-        url,
+      final res = await http.post(
+        Uri.parse('https://wubachat.com/api/app_auth.php'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'action': isLogin ? 'login' : 'register',
-          'phone': phone,
-          'password': password,
-          'role': selectedRole,
-          'name': name,
-        }),
+        body: jsonEncode({'action': isLogin ? 'login' : 'register', 'phone': phone, 'password': password, 'role': selectedRole, 'name': name}),
       );
-
-      final data = jsonDecode(response.body);
+      final data = jsonDecode(res.body);
 
       if (data['status'] == true) {
         final prefs = await SharedPreferences.getInstance();
@@ -90,37 +80,18 @@ class _AuthScreenState extends State<AuthScreen> {
         await prefs.setString('user_id', data['user']['id'].toString());
         await prefs.setString('user_name', data['user']['name'] ?? 'User');
         await prefs.setString('user_phone', data['user']['phone'] ?? phone);
-        await prefs.setString('user_role', data['user']['role'] ?? selectedRole);
         await prefs.setDouble('balance', (data['user']['balance'] as num?)?.toDouble() ?? 0.0);
 
         if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
-          );
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomeScreen()));
         }
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(data['message'] ?? 'Authentication failed')),
-          );
-        }
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? 'Auth failed')));
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Connection error: $e')),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => isLoading = false);
-    }
-  }
-
-  Future<void> _launchURL(String urlString) async {
-    final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      debugPrint('Could not launch $url');
     }
   }
 
@@ -129,208 +100,69 @@ class _AuthScreenState extends State<AuthScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 28.0),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 45),
-                    Center(
-                      child: Image.asset(
-                        'assets/logo.png',
-                        height: 110,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) => const Icon(
-                          Icons.chat_bubble_rounded,
-                          size: 80,
-                          color: Color(0xFF00A884),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => isLogin = true),
-                            child: Column(
-                              children: [
-                                Text(
-                                  'LOGIN',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: isLogin ? const Color(0xFF00A884) : Colors.grey.shade600,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Container(
-                                  height: 2.5,
-                                  color: isLogin ? const Color(0xFF00A884) : Colors.transparent,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setState(() => isLogin = false),
-                            child: Column(
-                              children: [
-                                Text(
-                                  'REGISTER',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: !isLogin ? const Color(0xFF00A884) : Colors.grey.shade600,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Container(
-                                  height: 2.5,
-                                  color: !isLogin ? const Color(0xFF00A884) : Colors.transparent,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Radio<String>(
-                          value: 'user',
-                          groupValue: selectedRole,
-                          activeColor: const Color(0xFF00A884),
-                          onChanged: (val) => setState(() => selectedRole = val!),
-                        ),
-                        const Text('User', style: TextStyle(fontWeight: FontWeight.w500)),
-                        const SizedBox(width: 30),
-                        Radio<String>(
-                          value: 'admin',
-                          groupValue: selectedRole,
-                          activeColor: const Color(0xFF00A884),
-                          onChanged: (val) => setState(() => selectedRole = val!),
-                        ),
-                        const Text('Admin', style: TextStyle(fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    if (!isLogin) ...[
-                      TextField(
-                        controller: nameController,
-                        decoration: InputDecoration(
-                          hintText: 'Full / Business Name',
-                          prefixIcon: const Icon(Icons.person_outline),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Color(0xFF00A884), width: 1.8),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-                    TextField(
-                      controller: phoneController,
-                      keyboardType: TextInputType.phone,
-                      decoration: InputDecoration(
-                        prefixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(width: 12),
-                            const Text('🇮🇳 +91', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                            const SizedBox(width: 8),
-                            Container(width: 1, height: 22, color: Colors.grey.shade400),
-                            const SizedBox(width: 10),
-                          ],
-                        ),
-                        hintText: 'Mobile Number',
-                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF00A884), width: 1.8),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: passwordController,
-                      obscureText: obscurePassword,
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                            color: Colors.grey.shade600,
-                          ),
-                          onPressed: () => setState(() => obscurePassword = !obscurePassword),
-                        ),
-                        hintText: 'Password',
-                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF00A884), width: 1.8),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 25),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: isLoading ? null : handleAuth,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00A884),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                        ),
-                        child: isLoading
-                            ? const SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                              )
-                            : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    isLogin ? 'CONTINUE' : 'REGISTER NOW',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Icon(Icons.arrow_forward, size: 18, color: Colors.white),
-                                ],
-                              ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-              color: const Color(0xFFF8FAFC),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28.0),
+          child: Column(
+            children: [
+              const SizedBox(height: 40),
+              Image.asset('assets/logo.png', height: 110, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.chat, size: 80, color: Color(0xFF00A884))),
+              const SizedBox(height: 25),
+              Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => _launchURL('https://wubachat.com'),
-                    child: const Text('https://wubachat.com', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.black87)),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => isLogin = true),
+                      child: Column(
+                        children: [
+                          Text('LOGIN', style: TextStyle(fontWeight: FontWeight.bold, color: isLogin ? const Color(0xFF00A884) : Colors.grey)),
+                          const SizedBox(height: 6),
+                          Container(height: 2.5, color: isLogin ? const Color(0xFF00A884) : Colors.transparent),
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 5),
-                  const Text('Founder : Humera Ameer', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF0B4636))),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => isLogin = false),
+                      child: Column(
+                        children: [
+                          Text('REGISTER', style: TextStyle(fontWeight: FontWeight.bold, color: !isLogin ? const Color(0xFF00A884) : Colors.grey)),
+                          const SizedBox(height: 6),
+                          Container(height: 2.5, color: !isLogin ? const Color(0xFF00A884) : Colors.transparent),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+              if (!isLogin) ...[
+                TextField(controller: nameController, decoration: const InputDecoration(hintText: 'Full Name', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
+              ],
+              TextField(controller: phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(hintText: 'Mobile Number', prefixText: '+91 ', border: OutlineInputBorder())),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passwordController,
+                obscureText: obscurePassword,
+                decoration: InputDecoration(
+                  hintText: 'Password',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(icon: Icon(obscurePassword ? Icons.visibility_off : Icons.visibility), onPressed: () => setState(() => obscurePassword = !obscurePassword)),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : handleAuth,
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A884), foregroundColor: Colors.white),
+                  child: isLoading ? const CircularProgressIndicator(color: Colors.white) : Text(isLogin ? 'CONTINUE' : 'REGISTER NOW', style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -338,7 +170,7 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // =========================================================================
-// 2. DASHBOARD (LIVE CHAT FILTERS & DYNAMIC QR WALLET)
+// 2. DASHBOARD HOME (LIVE CHAT FILTERS, SEARCH, DYNAMIC QR WALLET)
 // =========================================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -357,9 +189,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String adminPayee = 'Wubachat Payments';
   int metaSent = 0;
 
-  String currentChatFilter = 'all'; // all, unread, important, archive
+  String currentChatFilter = 'all';
+  String searchQuery = '';
+  final TextEditingController searchController = TextEditingController();
+
   List<dynamic> chatList = [];
   bool isLoadingChats = true;
+  String? activeChatPhone;
+  String? activeChatName;
 
   @override
   void initState() {
@@ -375,6 +212,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void dispose() {
     _homePollTimer?.cancel();
+    searchController.dispose();
     super.dispose();
   }
 
@@ -407,13 +245,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> fetchLiveChats({bool background = false}) async {
     if (!background) setState(() => isLoadingChats = true);
     try {
-      final res = await http.get(
-        Uri.parse('https://wubachat.com/api/app_api.php?action=get_chats&user_id=$userId&filter=$currentChatFilter'),
-      );
+      final url = 'https://wubachat.com/api/app_api.php?action=get_chats&user_id=$userId&filter=$currentChatFilter&search=${Uri.encodeComponent(searchQuery)}';
+      final res = await http.get(Uri.parse(url));
       final data = jsonDecode(res.body);
       if (data['status'] == true && mounted) {
         setState(() {
           chatList = data['chats'] ?? [];
+          if (activeChatPhone == null && chatList.isNotEmpty) {
+            activeChatPhone = chatList[0]['phone_number'];
+            activeChatName = chatList[0]['contact_name'];
+          }
         });
       }
     } catch (_) {}
@@ -423,15 +264,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const AuthScreen()),
-      );
-    }
+    if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AuthScreen()));
   }
 
-  // --- DYNAMIC AMOUNT-LINKED QR RECHARGE DIALOG ---
   void _openRechargeDialog() {
     final amountController = TextEditingController(text: '100');
     final utrController = TextEditingController();
@@ -465,26 +300,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   TextField(
                     controller: amountController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Recharge Amount (Min: ₹100)',
-                      prefixText: '₹ ',
-                      border: OutlineInputBorder(),
-                    ),
+                    decoration: const InputDecoration(labelText: 'Recharge Amount (Min: ₹100)', prefixText: '₹ ', border: OutlineInputBorder()),
                     onChanged: (val) {
                       final parsed = double.tryParse(val) ?? 100.0;
-                      setModalState(() {
-                        currentAmt = parsed < 100.0 ? 100.0 : parsed;
-                      });
+                      setModalState(() => currentAmt = parsed < 100.0 ? 100.0 : parsed);
                     },
                   ),
                   const SizedBox(height: 10),
-                  TextField(
-                    controller: utrController,
-                    decoration: const InputDecoration(
-                      labelText: '12-digit UPI UTR / Ref Number',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
+                  TextField(controller: utrController, decoration: const InputDecoration(labelText: '12-digit UPI UTR / Ref Number', border: OutlineInputBorder())),
                 ],
               ),
             ),
@@ -500,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     return;
                   }
                   if (utr.length < 6) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid 12-digit UTR')));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter valid 12-digit UTR')));
                     return;
                   }
                   Navigator.pop(ctx);
@@ -523,127 +346,260 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  void _openBillingLogsModal() async {
+    try {
+      final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=fetch_billing_logs&user_id=$userId'));
+      final data = jsonDecode(res.body);
+      final records = data['records'] ?? [];
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Billing & Usage Logs', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 350,
+              child: records.isEmpty
+                  ? const Center(child: Text('No transaction logs recorded yet.'))
+                  : ListView.separated(
+                      itemCount: records.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final r = records[i];
+                        return ListTile(
+                          dense: true,
+                          title: Text('+${r['recipient_phone']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('${r['created_at']} • ${r['sent_via']}'),
+                          trailing: Text('₹${r['cost']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF008069))),
+                        );
+                      },
+                    ),
+            ),
+            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+          ),
+        );
+      }
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Wubachat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19, color: Colors.white)),
-            Text('Meta Limit: $metaSent / 250 Today', style: const TextStyle(fontSize: 10.5, color: Colors.white70)),
-          ],
-        ),
-        backgroundColor: const Color(0xFF008069),
-        elevation: 0,
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: () => fetchLiveChats(background: false)),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            onSelected: (val) {
-              if (val == 'recharge') _openRechargeDialog();
-              if (val == 'logout') _logout();
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'recharge', child: Text('Add Wallet Balance')),
-              const PopupMenuItem(value: 'logout', child: Text('Logout', style: TextStyle(color: Colors.red))),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth > 750;
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Row(
+              children: [
+                const Text('Wubachat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.white)),
+                const SizedBox(width: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12)),
+                  child: Text('Meta: $metaSent / 250', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: _openRechargeDialog,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(color: const Color(0xFF00A884), borderRadius: BorderRadius.circular(12)),
+                    child: Text('₹${balance.toStringAsFixed(2)} + ADD', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF008069),
+            elevation: 0,
+            actions: [
+              IconButton(icon: const Icon(Icons.receipt_long, color: Colors.white), onPressed: _openBillingLogsModal, tooltip: 'Billing Logs'),
+              IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: () => fetchLiveChats(background: false), tooltip: 'Refresh'),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, color: Colors.white),
+                onSelected: (val) {
+                  if (val == 'recharge') _openRechargeDialog();
+                  if (val == 'billing') _openBillingLogsModal();
+                  if (val == 'logout') _logout();
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'recharge', child: Text('Add Wallet Balance')),
+                  const PopupMenuItem(value: 'billing', child: Text('Billing Logs')),
+                  const PopupMenuItem(value: 'logout', child: Text('Logout', style: TextStyle(color: Colors.red))),
+                ],
+              ),
+            ],
+            bottom: isDesktop
+                ? null
+                : TabBar(
+                    controller: _tabController,
+                    indicatorColor: Colors.white,
+                    indicatorWeight: 3.5,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.white70,
+                    tabs: const [Tab(text: 'CHATS'), Tab(text: 'TOOLS'), Tab(text: 'WALLET')],
+                  ),
+          ),
+          body: Column(
+            children: [
+              // TOP RED ALERT BANNER (FROM DASHBOARD)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                color: Colors.red.shade700,
+                child: const Row(
+                  children: [
+                    Icon(Icons.warning_amber, size: 14, color: Colors.amber),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'ALERT: Make sure you use Meta connected numbers for official delivery.',
+                        style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              Expanded(
+                child: isDesktop
+                    ? Row(
+                        children: [
+                          SizedBox(width: 380, child: _buildChatsListSection(isDesktop: true)),
+                          const VerticalDivider(width: 1),
+                          Expanded(
+                            child: activeChatPhone == null
+                                ? const Center(child: Text('Select a conversation to start messaging'))
+                                : ChatDetailScreen(key: ValueKey(activeChatPhone), name: activeChatName ?? '', phone: activeChatPhone!, userId: userId, isEmbedded: true),
+                          ),
+                        ],
+                      )
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [_buildChatsListSection(isDesktop: false), _buildToolsTab(), _buildWalletTab()],
+                      ),
+              ),
             ],
           ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          indicatorWeight: 3.5,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [Tab(text: 'CHATS'), Tab(text: 'TOOLS'), Tab(text: 'WALLET')],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [_buildChatsTab(), _buildToolsTab(), _buildWalletTab()],
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF00A884),
-        child: const Icon(Icons.chat, color: Colors.white),
-        onPressed: () => _openNewChatDialog(context),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildChatsTab() {
+  Widget _buildChatsListSection({required bool isDesktop}) {
     return Column(
       children: [
-        // --- CHAT FILTER BUTTONS ---
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          color: Colors.grey.shade50,
-          child: Row(
-            children: [
-              _filterChip('all', 'All'),
-              const SizedBox(width: 6),
-              _filterChip('unread', 'Unread'),
-              const SizedBox(width: 6),
-              _filterChip('important', 'Important'),
-              const SizedBox(width: 6),
-              _filterChip('archive', 'Archive'),
-            ],
+        // SEARCH BOX
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+          child: Container(
+            height: 38,
+            decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(20)),
+            child: TextField(
+              controller: searchController,
+              decoration: const InputDecoration(
+                hintText: 'Search contacts, numbers or words...',
+                hintStyle: TextStyle(fontSize: 12),
+                prefixIcon: Icon(Icons.search, size: 18),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 9),
+              ),
+              onChanged: (val) {
+                setState(() => searchQuery = val);
+                fetchLiveChats(background: false);
+              },
+            ),
           ),
         ),
+
+        // FILTER TABS (ALL, UNREAD, IMPORTANT, ARCHIVE)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _filterChip('all', 'All'),
+                const SizedBox(width: 6),
+                _filterChip('unread', 'Unread'),
+                const SizedBox(width: 6),
+                _filterChip('important', 'Important'),
+                const SizedBox(width: 6),
+                _filterChip('archive', 'Archive'),
+              ],
+            ),
+          ),
+        ),
+        const Divider(height: 1),
+
+        // CONTACTS LIST
         Expanded(
           child: isLoadingChats
               ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
               : chatList.isEmpty
                   ? Center(child: Text('No conversations in $currentChatFilter tab', style: const TextStyle(color: Colors.grey)))
-                  : RefreshIndicator(
-                      onRefresh: () async {
-                        await fetchLiveChats(background: false);
-                      },
-                      child: ListView.separated(
-                        itemCount: chatList.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1, indent: 75),
-                        itemBuilder: (context, index) {
-                          final chat = chatList[index];
-                          final name = chat['contact_name'] ?? ('+' + (chat['phone_number'] ?? ''));
-                          final phone = chat['phone_number'] ?? '';
-                          final lastMsg = chat['last_msg'] ?? 'Tap to chat';
-                          final unread = (chat['unread_count'] as num?)?.toInt() ?? 0;
-                          final lastStatus = chat['last_status'] ?? 'sent';
-                          final isOutbound = chat['last_direction'] == 'outbound';
+                  : ListView.separated(
+                      itemCount: chatList.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1, indent: 75),
+                      itemBuilder: (context, index) {
+                        final chat = chatList[index];
+                        final name = chat['contact_name'] ?? ('+' + (chat['phone_number'] ?? ''));
+                        final phone = chat['phone_number'] ?? '';
+                        final lastMsg = chat['last_msg'] ?? 'Tap to chat';
+                        final unread = (chat['unread_count'] as num?)?.toInt() ?? 0;
+                        final isOutbound = chat['last_direction'] == 'outbound';
+                        final isSelected = isDesktop && activeChatPhone == phone;
 
-                          return ListTile(
+                        return Container(
+                          color: isSelected ? Colors.grey.shade200 : Colors.white,
+                          child: ListTile(
                             leading: CircleAvatar(
-                              radius: 25,
+                              radius: 24,
                               backgroundColor: const Color(0xFF25D366).withOpacity(0.18),
                               child: Text(name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF008069))),
                             ),
-                            title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            title: Row(
+                              children: [
+                                Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5), overflow: TextOverflow.ellipsis)),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(color: Colors.emerald.shade50, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.emerald.shade200)),
+                                  child: const Text('✓✓ Synced', style: TextStyle(fontSize: 8.5, color: Color(0xFF008069), fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
                             subtitle: Row(
                               children: [
-                                if (isOutbound) ...[
-                                  _renderTick(lastStatus, 14),
-                                  const SizedBox(width: 4),
-                                ],
-                                Expanded(child: Text(lastMsg, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey.shade600, fontSize: 13))),
+                                if (isOutbound) const Icon(Icons.done_all, size: 13, color: Color(0xFF34B7F1)),
+                                if (isOutbound) const SizedBox(width: 3),
+                                Expanded(child: Text(lastMsg, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey.shade600, fontSize: 12.5))),
                               ],
                             ),
                             trailing: unread > 0
                                 ? Container(
-                                    padding: const EdgeInsets.all(6),
+                                    padding: const EdgeInsets.all(5),
                                     decoration: const BoxDecoration(color: Color(0xFF25D366), shape: BoxShape.circle),
-                                    child: Text('$unread', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                    child: Text('$unread', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                                   )
                                 : null,
-                            onTap: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => ChatDetailScreen(name: name, phone: phone, userId: userId)),
-                              );
-                              fetchLiveChats(background: true);
+                            onTap: () {
+                              if (isDesktop) {
+                                setState(() {
+                                  activeChatPhone = phone;
+                                  activeChatName = name;
+                                });
+                              } else {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => ChatDetailScreen(name: name, phone: phone, userId: userId, isEmbedded: false)),
+                                );
+                              }
                             },
-                          );
-                        },
-                      ),
+                          ),
+                        );
+                      },
                     ),
         ),
       ],
@@ -658,46 +614,36 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         fetchLiveChats(background: false);
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE7FCE3) : Colors.white,
+          color: isSelected ? const Color(0xFFE7FCE3) : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: isSelected ? const Color(0xFF008069) : Colors.grey.shade300),
+          border: Border.all(color: isSelected ? const Color(0xFF008069) : Colors.transparent),
         ),
-        child: Text(label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: isSelected ? const Color(0xFF008069) : Colors.grey.shade700)),
+        child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isSelected ? const Color(0xFF008069) : Colors.grey.shade700)),
       ),
     );
-  }
-
-  Widget _renderTick(String status, double size) {
-    if (status == 'read') return Icon(Icons.done_all, size: size, color: const Color(0xFF34B7F1));
-    if (status == 'delivered') return Icon(Icons.done_all, size: size, color: Colors.grey);
-    return Icon(Icons.done, size: size, color: Colors.grey);
   }
 
   Widget _buildToolsTab() {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text('Modular Business & Utility Tools', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        const SizedBox(height: 10),
         _toolCard(Icons.directions_car, 'mParivahan RC & DL Verification', 'Instant vehicle details verification engine', 'https://services.techywajid.com'),
         _toolCard(Icons.picture_as_pdf, 'PDF to Excel Data Extractor', 'Parse tabular documents directly into spreadsheets', 'https://services.techywajid.com'),
-        _toolCard(Icons.campaign, 'Official WhatsApp Bulk Campaign', '1,000 Numbers Meta Blast Gateway', 'https://wubachat.com/broadcast.php'),
+        _toolCard(Icons.campaign, '1,000 Numbers Meta Bulk Campaign', 'Broadcast templates directly from CSV/Excel', 'https://wubachat.com/broadcast.php'),
       ],
     );
   }
 
   Widget _toolCard(IconData icon, String title, String subtitle, String url) {
     return Card(
-      elevation: 0.5,
-      margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
         leading: Icon(icon, color: const Color(0xFF008069)),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 14),
       ),
     );
   }
@@ -709,55 +655,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         children: [
           Container(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFF008069), Color(0xFF00A884)]),
-              borderRadius: BorderRadius.circular(16),
-            ),
+            decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF008069), Color(0xFF00A884)]), borderRadius: BorderRadius.circular(16)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Live Wallet Balance', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                const Text('Live Balance', style: TextStyle(color: Colors.white70)),
                 const SizedBox(height: 6),
                 Text('₹${balance.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
                 ElevatedButton.icon(
                   onPressed: _openRechargeDialog,
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add Credit (UPI QR)'),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Credit via UPI'),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF008069)),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 25),
-          ListTile(leading: const Icon(Icons.account_circle, color: Color(0xFF008069)), title: Text(userName), subtitle: const Text('Logged Account')),
-          const Divider(),
-          ListTile(leading: const Icon(Icons.speed, color: Color(0xFF008069)), title: const Text('Daily Meta Limit'), subtitle: Text('$metaSent sent today of 250 quota')),
-        ],
-      ),
-    );
-  }
-
-  void _openNewChatDialog(BuildContext context) {
-    final phoneController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Start New Conversation'),
-        content: TextField(controller: phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(hintText: 'Enter 10-digit number', prefixText: '+91 ')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A884)),
-            onPressed: () {
-              final num = phoneController.text.trim();
-              if (num.isNotEmpty) {
-                Navigator.pop(ctx);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => ChatDetailScreen(name: '+91 $num', phone: '91$num', userId: userId)));
-              }
-            },
-            child: const Text('Chat', style: TextStyle(color: Colors.white)),
-          ),
+          const SizedBox(height: 20),
+          ListTile(leading: const Icon(Icons.speed, color: Color(0xFF008069)), title: const Text('Meta Cloud API Limit'), subtitle: Text('$metaSent sent today of 250 daily limit')),
         ],
       ),
     );
@@ -765,14 +681,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 }
 
 // =========================================================================
-// 3. CHAT ROOM (TEMPLATE ENGINE, CONTACT DRAWER, STATUS TICKS)
+// 3. CHAT ROOM (DUAL SEND BUTTONS, TEMPLATES, REACTIONS, TRANSLATE)
 // =========================================================================
 class ChatDetailScreen extends StatefulWidget {
   final String name;
   final String phone;
   final String userId;
+  final bool isEmbedded;
 
-  const ChatDetailScreen({super.key, required this.name, required this.phone, required this.userId});
+  const ChatDetailScreen({super.key, required this.name, required this.phone, required this.userId, this.isEmbedded = false});
 
   @override
   State<ChatDetailScreen> createState() => _ChatDetailScreenState();
@@ -784,7 +701,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   Timer? _chatPollingTimer;
   List<dynamic> _messages = [];
   bool _isLoading = true;
-  String _selectedChannel = 'whatsapp';
+
+  String? _replyToWamid;
+  String? _replyToText;
+  String _selectedLang = 'hi-Latn';
 
   @override
   void initState() {
@@ -823,13 +743,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     });
   }
 
-  Future<void> _sendMessage() async {
+  Future<void> _sendMessage(String channel) async {
     final text = _msgController.text.trim();
     if (text.isEmpty) return;
-    _msgController.clear();
 
+    final sendingWamid = _replyToWamid;
+    _msgController.clear();
     setState(() {
-      _messages.add({'message_text': text, 'direction': 'outbound', 'is_me': 1, 'status': 'sent', 'created_at': 'Just now'});
+      _replyToWamid = null;
+      _replyToText = null;
+      _messages.add({
+        'id': 0,
+        'message_text': text,
+        'direction': 'outbound',
+        'is_me': 1,
+        'status': 'sent',
+        'created_at': 'Just now',
+      });
     });
     _scrollToBottom();
 
@@ -837,12 +767,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       await http.post(
         Uri.parse('https://wubachat.com/api/app_api.php'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'action': 'send_message', 'user_id': widget.userId, 'recipient': widget.phone, 'message': text, 'sent_via': _selectedChannel}),
+        body: jsonEncode({'action': 'send_message', 'user_id': widget.userId, 'recipient': widget.phone, 'message': text, 'sent_via': channel, 'reply_to_wamid': sendingWamid ?? ''}),
       );
+      _fetchMessages();
     } catch (_) {}
   }
 
-  // --- PARAMOUNT SURVEY TEMPLATE MODAL (3 Body Variables) ---
+  // --- PARAMOUNT SURVEY TEMPLATE (CLAIM, VEHICLE, LINK) ---
   void _openSurveyTemplateModal() {
     final claimController = TextEditingController();
     final vehicleController = TextEditingController();
@@ -851,17 +782,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Paramount Survey Alert Template', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        title: const Text('Paramount Inspection Alert Template', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Outside 24-hr session. Official template costs ₹0.50 (1 Credit).', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            const Text('Meta Template (Costs ₹0.50 / 1 Credit)', style: TextStyle(fontSize: 11, color: Colors.grey)),
             const SizedBox(height: 10),
-            TextField(controller: claimController, decoration: const InputDecoration(labelText: '1. Claim Number', border: OutlineInputBorder())),
+            TextField(controller: claimController, decoration: const InputDecoration(labelText: 'Claim Number', border: OutlineInputBorder())),
             const SizedBox(height: 8),
-            TextField(controller: vehicleController, decoration: const InputDecoration(labelText: '2. Vehicle Number', border: OutlineInputBorder())),
+            TextField(controller: vehicleController, decoration: const InputDecoration(labelText: 'Vehicle Number', border: OutlineInputBorder())),
             const SizedBox(height: 8),
-            TextField(controller: linkController, decoration: const InputDecoration(labelText: '3. Inspection Link', border: OutlineInputBorder())),
+            TextField(controller: linkController, decoration: const InputDecoration(labelText: 'Inspection Link', border: OutlineInputBorder())),
           ],
         ),
         actions: [
@@ -875,73 +806,159 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               if (c.isEmpty || v.isEmpty || l.isEmpty) return;
               Navigator.pop(ctx);
 
-              try {
-                final res = await http.post(
-                  Uri.parse('https://wubachat.com/api/app_api.php'),
-                  headers: {'Content-Type': 'application/json'},
-                  body: jsonEncode({
-                    'action': 'send_message',
-                    'user_id': widget.userId,
-                    'recipient': widget.phone,
-                    'mode': 'template',
-                    'claim_number': c,
-                    'vehicle_number': v,
-                    'inspection_link': l
-                  }),
-                );
-                final d = jsonDecode(res.body);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(d['message'] ?? 'Dispatched')));
-                _fetchMessages();
-              } catch (_) {}
+              await http.post(
+                Uri.parse('https://wubachat.com/api/app_api.php'),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({'action': 'send_message', 'user_id': widget.userId, 'recipient': widget.phone, 'mode': 'template', 'claim_number': c, 'vehicle_number': v, 'inspection_link': l}),
+              );
+              _fetchMessages();
             },
-            child: const Text('Send WhatsApp'),
+            child: const Text('Send Official WhatsApp'),
           ),
         ],
       ),
     );
   }
 
-  // --- CONTACT INFO & MEDIA DRAWER ---
-  void _openContactDrawer() async {
+  // --- TRANSLATE INPUT TEXT ---
+  Future<void> _translateInputText() async {
+    final text = _msgController.text.trim();
+    if (text.isEmpty) return;
     try {
-      final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=get_contact_info&user_id=${widget.userId}&phone=${widget.phone}'));
-      final data = jsonDecode(res.body);
-
-      if (mounted) {
-        showModalBottomSheet(
-          context: context,
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-          builder: (ctx) => Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircleAvatar(radius: 30, backgroundColor: const Color(0xFF008069), child: Text(widget.name.substring(0, 1), style: const TextStyle(color: Colors.white, fontSize: 24))),
-                const SizedBox(height: 10),
-                Text(widget.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                Text('+${widget.phone}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                const SizedBox(height: 12),
-                Text(data['bio'] ?? 'Hey there! I am using WhatsApp.', style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
-                const Divider(height: 25),
-                ListTile(
-                  leading: const Icon(Icons.ban, color: Colors.red),
-                  title: Text(data['is_blocked'] == true ? 'Unblock Contact' : 'Block Contact', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    await http.post(
-                      Uri.parse('https://wubachat.com/api/app_api.php'),
-                      headers: {'Content-Type': 'application/json'},
-                      body: jsonEncode({'action': 'toggle_block', 'user_id': widget.userId, 'phone': widget.phone}),
-                    );
-                    _openContactDrawer();
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
+      final res = await http.post(
+        Uri.parse('https://wubachat.com/api/app_api.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'action': 'translate', 'user_id': widget.userId, 'text': text, 'target': _selectedLang}),
+      );
+      final d = jsonDecode(res.body);
+      if (d['status'] == true && d['translated_text'] != null) {
+        _msgController.text = d['translated_text'];
       }
     } catch (_) {}
+  }
+
+  // --- MESSAGE POPUP ACTION BAR (REPLY, REACT, TRANSLATE, DELETE) ---
+  void _showMessageOptions(Map<String, dynamic> msg) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Emoji Reaction Bar
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: ['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) {
+                  return GestureDetector(
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await http.post(
+                        Uri.parse('https://wubachat.com/api/app_api.php'),
+                        headers: {'Content-Type': 'application/json'},
+                        body: jsonEncode({'action': 'react_message', 'user_id': widget.userId, 'message_id': msg['id'], 'emoji': emoji}),
+                      );
+                      _fetchMessages();
+                    },
+                    child: Text(emoji, style: const TextStyle(fontSize: 28)),
+                  );
+                }).toList(),
+              ),
+              const Divider(height: 25),
+              ListTile(
+                leading: const Icon(Icons.reply, color: Color(0xFF008069)),
+                title: const Text('Reply'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _replyToWamid = msg['wamid'] ?? msg['id'].toString();
+                    _replyToText = msg['message_text'];
+                  });
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.translate, color: Color(0xFF008069)),
+                title: const Text('Translate Message'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final res = await http.post(
+                    Uri.parse('https://wubachat.com/api/app_api.php'),
+                    headers: {'Content-Type': 'application/json'},
+                    body: jsonEncode({'action': 'translate', 'user_id': widget.userId, 'text': msg['message_text'], 'target': 'hi'}),
+                  );
+                  final d = jsonDecode(res.body);
+                  if (mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                        title: const Text('Translation'),
+                        content: Text(d['translated_text'] ?? msg['message_text']),
+                        actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Close'))],
+                      ),
+                    );
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete Message'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await http.post(
+                    Uri.parse('https://wubachat.com/api/app_api.php'),
+                    headers: {'Content-Type': 'application/json'},
+                    body: jsonEncode({'action': 'delete_message', 'user_id': widget.userId, 'message_id': msg['id'], 'delete_type': 'everyone'}),
+                  );
+                  _fetchMessages();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- CONTACT INFO & MEDIA DRAWER ---
+  void _openContactDrawer() async {
+    final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=get_contact_info&user_id=${widget.userId}&phone=${widget.phone}'));
+    final data = jsonDecode(res.body);
+
+    if (mounted) {
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(radius: 30, backgroundColor: const Color(0xFF008069), child: Text(widget.name.substring(0, 1), style: const TextStyle(color: Colors.white, fontSize: 24))),
+              const SizedBox(height: 10),
+              Text(widget.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              Text('+${widget.phone}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+              const SizedBox(height: 12),
+              Text(data['bio'] ?? 'Hey there! I am using WhatsApp.', style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
+              const Divider(height: 25),
+              ListTile(
+                leading: const Icon(Icons.ban, color: Colors.red),
+                title: Text(data['is_blocked'] == true ? 'Unblock Contact' : 'Block Contact', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await http.post(
+                    Uri.parse('https://wubachat.com/api/app_api.php'),
+                    headers: {'Content-Type': 'application/json'},
+                    body: jsonEncode({'action': 'toggle_block', 'user_id': widget.userId, 'phone': widget.phone}),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -950,13 +967,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       backgroundColor: const Color(0xFFEFE7DE),
       appBar: AppBar(
         backgroundColor: const Color(0xFF008069),
+        leading: widget.isEmbedded ? null : IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
         title: GestureDetector(
           onTap: _openContactDrawer,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-              const Text('Tap for Contact Info', style: TextStyle(color: Colors.white70, fontSize: 10)),
+              Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold)),
+              const Text('⚡ On Wubachat (Free)', style: TextStyle(color: Colors.white70, fontSize: 10)),
             ],
           ),
         ),
@@ -967,20 +985,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       ),
       body: Column(
         children: [
-          // CHANNEL TOGGLE
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-            color: const Color(0xFFDCF8C6),
-            child: Row(
-              children: [
-                const Text('Channel: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF0B4636))),
-                const Spacer(),
-                ChoiceChip(label: const Text('WhatsApp (Meta)'), selected: _selectedChannel == 'whatsapp', onSelected: (_) => setState(() => _selectedChannel = 'whatsapp')),
-                const SizedBox(width: 6),
-                ChoiceChip(label: const Text('Wubachat Free'), selected: _selectedChannel == 'wubachat', onSelected: (_) => setState(() => _selectedChannel = 'wubachat')),
-              ],
-            ),
-          ),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
@@ -993,34 +997,50 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       final bool isMe = (m['direction'] == 'outbound' || m['is_me'] == 1);
                       final String text = m['message_text'] ?? '';
                       final String status = m['status'] ?? 'sent';
+                      final String reaction = m['reaction'] ?? '';
                       final String time = m['created_at'] != null ? m['created_at'].toString().split(' ').last : '';
 
-                      return Align(
-                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                          decoration: BoxDecoration(
-                            color: isMe ? const Color(0xFFE7FFDB) : Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 2)],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                      return GestureDetector(
+                        onLongPress: () => _showMessageOptions(m),
+                        child: Align(
+                          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                          child: Stack(
+                            clipBehavior: Clip.none,
                             children: [
-                              Text(text, style: const TextStyle(fontSize: 14.5)),
-                              const SizedBox(height: 3),
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(time, style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600)),
-                                  if (isMe) ...[
-                                    const SizedBox(width: 4),
-                                    Icon(status == 'read' ? Icons.done_all : Icons.done, size: 14, color: status == 'read' ? const Color(0xFF34B7F1) : Colors.grey),
+                              Container(
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                                decoration: BoxDecoration(
+                                  color: isMe ? const Color(0xFFE7FFDB) : Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 2)],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(text, style: const TextStyle(fontSize: 14)),
+                                    const SizedBox(height: 3),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(time, style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600)),
+                                        if (isMe) ...[
+                                          const SizedBox(width: 4),
+                                          Icon(status == 'read' ? Icons.done_all : Icons.done, size: 14, color: status == 'read' ? const Color(0xFF34B7F1) : Colors.grey),
+                                        ],
+                                      ],
+                                    ),
                                   ],
-                                ],
+                                ),
                               ),
+                              if (reaction.isNotEmpty)
+                                Positioned(
+                                  bottom: -5,
+                                  right: isMe ? 4 : null,
+                                  left: !isMe ? 4 : null,
+                                  child: Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: Text(reaction, style: const TextStyle(fontSize: 12))),
+                                ),
                             ],
                           ),
                         ),
@@ -1028,21 +1048,74 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     },
                   ),
           ),
+
+          // REPLY BANNER
+          if (_replyToWamid != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              color: Colors.grey.shade200,
+              child: Row(
+                children: [
+                  const Icon(Icons.reply, size: 16, color: Color(0xFF008069)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Replying: ${_replyToText ?? ""}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12))),
+                  IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => setState(() => _replyToWamid = null)),
+                ],
+              ),
+            ),
+
+          // BOTTOM SEND BAR (TRANSLATE DROPDOWN + DUAL ACTION BUTTONS)
           Container(
             padding: const EdgeInsets.all(8),
-            child: Row(
+            color: Colors.white,
+            child: Column(
               children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(25)),
-                    child: TextField(controller: _msgController, decoration: const InputDecoration(hintText: 'Message', border: InputBorder.none)),
-                  ),
+                Row(
+                  children: [
+                    // Language Dropdown
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+                      child: DropdownButton<String>(
+                        value: _selectedLang,
+                        underline: const SizedBox(),
+                        isDense: true,
+                        items: const [
+                          DropdownMenuItem(value: 'hi-Latn', child: Text('Hinglish', style: TextStyle(fontSize: 11))),
+                          DropdownMenuItem(value: 'hi', child: Text('Hindi', style: TextStyle(fontSize: 11))),
+                          DropdownMenuItem(value: 'en', child: Text('English', style: TextStyle(fontSize: 11))),
+                        ],
+                        onChanged: (val) => setState(() => _selectedLang = val!),
+                      ),
+                    ),
+                    IconButton(icon: const Icon(Icons.language, color: Color(0xFF008069), size: 18), onPressed: _translateInputText, tooltip: 'Translate Input'),
+                    Expanded(
+                      child: TextField(
+                        controller: _msgController,
+                        decoration: const InputDecoration(hintText: 'Type message...', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 8)),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                CircleAvatar(
-                  backgroundColor: const Color(0xFF00A884),
-                  child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 18), onPressed: _sendMessage),
+                const SizedBox(height: 6),
+                // DUAL SEND BUTTONS (FROM SCREENSHOT 3)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A884), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                      icon: const Icon(Icons.send, size: 14),
+                      label: const Text('Send Wubachat', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                      onPressed: () => _sendMessage('wubachat'),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF128C7E), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                      icon: const Icon(Icons.send, size: 14),
+                      label: const Text('Send WhatsApp', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                      onPressed: () => _sendMessage('whatsapp'),
+                    ),
+                  ],
                 ),
               ],
             ),
