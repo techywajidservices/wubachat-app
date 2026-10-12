@@ -35,7 +35,7 @@ class WubachatApp extends StatelessWidget {
 }
 
 // =========================================================================
-// 1. AUTH SCREEN (SINGLE CLEAN LOGO & MAIN DOMAIN API)
+// 1. AUTH SCREEN
 // =========================================================================
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -69,7 +69,6 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => isLoading = true);
 
     try {
-      // Main Domain URL: wubachat.com
       final url = Uri.parse('https://wubachat.com/api/app_auth.php');
       final response = await http.post(
         url,
@@ -82,10 +81,6 @@ class _AuthScreenState extends State<AuthScreen> {
           'name': name,
         }),
       );
-
-      if (response.body.trim().isEmpty) {
-        throw Exception('Server returned blank response. Check api/app_auth.php');
-      }
 
       final data = jsonDecode(response.body);
 
@@ -389,7 +384,7 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // =========================================================================
-// 2. DASHBOARD (MAIN DOMAIN wubachat.com)
+// 2. DASHBOARD (LIVE REAL-TIME WALLET & CHATS)
 // =========================================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -412,7 +407,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadInitialData();
-    _homePollTimer = Timer.periodic(const Duration(seconds: 5), (_) => fetchLiveChats(background: true));
+    _homePollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      fetchLiveChats(background: true);
+      fetchLiveWallet();
+    });
   }
 
   @override
@@ -426,9 +424,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     setState(() {
       userId = prefs.getString('user_id') ?? '1';
       userName = prefs.getString('user_name') ?? 'User';
-      balance = prefs.getDouble('balance') ?? 0.0;
     });
+    fetchLiveWallet();
     fetchLiveChats(background: false);
+  }
+
+  Future<void> fetchLiveWallet() async {
+    try {
+      final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=get_wallet&user_id=$userId'));
+      final data = jsonDecode(res.body);
+      if (data['status'] == true && mounted) {
+        setState(() {
+          userName = data['name'] ?? userName;
+          balance = (data['balance'] as num?)?.toDouble() ?? 0.0;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> fetchLiveChats({bool background = false}) async {
@@ -478,7 +489,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: () => fetchLiveChats(background: false),
+            onPressed: () {
+              fetchLiveWallet();
+              fetchLiveChats(background: false);
+            },
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.white),
@@ -554,7 +568,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
 
     return RefreshIndicator(
-      onRefresh: () => fetchLiveChats(background: false),
+      onRefresh: () async {
+        fetchLiveWallet();
+        await fetchLiveChats(background: false);
+      },
       child: ListView.separated(
         itemCount: chatList.length,
         separatorBuilder: (context, index) => const Divider(height: 1, indent: 75),
@@ -564,6 +581,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           final phone = chat['phone_number'] ?? '';
           final lastMsg = chat['last_msg'] ?? 'Tap to chat';
           final unread = (chat['unread_count'] as num?)?.toInt() ?? 0;
+          final lastStatus = chat['last_status'] ?? 'sent';
+          final isOutbound = chat['last_direction'] == 'outbound';
 
           return ListTile(
             leading: CircleAvatar(
@@ -572,11 +591,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               child: const Icon(Icons.person, color: Color(0xFF008069), size: 30),
             ),
             title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            subtitle: Text(
-              lastMsg,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 13.5),
+            subtitle: Row(
+              children: [
+                if (isOutbound) ...[
+                  _renderTick(lastStatus, 15),
+                  const SizedBox(width: 4),
+                ],
+                Expanded(
+                  child: Text(
+                    lastMsg,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13.5),
+                  ),
+                ),
+              ],
             ),
             trailing: unread > 0
                 ? Container(
@@ -601,6 +630,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         },
       ),
     );
+  }
+
+  Widget _renderTick(String status, double size) {
+    if (status == 'read') {
+      return Icon(Icons.done_all, size: size, color: const Color(0xFF34B7F1)); // Blue Double Tick
+    } else if (status == 'delivered') {
+      return Icon(Icons.done_all, size: size, color: Colors.grey); // Grey Double Tick
+    } else {
+      return Icon(Icons.done, size: size, color: Colors.grey); // Single Tick
+    }
   }
 
   Widget _buildToolsTab() {
@@ -671,7 +710,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Current Balance', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                const Text('Current Balance (Live Sync)', style: TextStyle(color: Colors.white70, fontSize: 14)),
                 const SizedBox(height: 6),
                 Text('₹${balance.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 14),
@@ -738,7 +777,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 }
 
 // =========================================================================
-// 3. WHATSAPP LIVE CONVERSATION (MAIN DOMAIN wubachat.com)
+// 3. WHATSAPP CHAT ROOM (CHANNEL TOGGLE, MEDIA, TICKS, LONG-PRESS ACTIONS)
 // =========================================================================
 class ChatDetailScreen extends StatefulWidget {
   final String name;
@@ -757,6 +796,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   Timer? _chatPollingTimer;
   List<dynamic> _messages = [];
   bool _isLoading = true;
+
+  // Channel Toggle: 'whatsapp' OR 'wubachat'
+  String _selectedChannel = 'whatsapp';
+
+  // Reply Context
+  String? _replyToWamid;
+  String? _replyToText;
+
+  // Emoji Tray Visibility
+  bool _showEmojiTray = false;
+
+  final List<String> _quickEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉', '💯', '👏', '✅', '🤝'];
 
   @override
   void initState() {
@@ -780,7 +831,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       final data = jsonDecode(res.body);
       if (data['status'] == true && mounted) {
         final List<dynamic> newMsgs = data['messages'] ?? [];
-        if (newMsgs.length != _messages.length) {
+        if (newMsgs.length != _messages.length || initial) {
           setState(() {
             _messages = newMsgs;
           });
@@ -806,33 +857,257 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     });
   }
 
-  Future<void> _sendMessage() async {
+  Future<void> _sendMessage({String? mediaUrl, String? mediaType}) async {
     final text = _msgController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && (mediaUrl == null || mediaUrl.isEmpty)) return;
 
     _msgController.clear();
+    final sendingText = text;
+    final sendingWamid = _replyToWamid;
+
     setState(() {
+      _replyToWamid = null;
+      _replyToText = null;
+      _showEmojiTray = false;
       _messages.add({
-        'message_text': text,
+        'id': 0,
+        'message_text': sendingText,
+        'media_url': mediaUrl ?? '',
+        'message_type': mediaType ?? 'text',
         'direction': 'outbound',
         'is_me': 1,
+        'status': 'sent',
+        'sent_via': _selectedChannel,
         'created_at': 'Just now',
       });
     });
     _scrollToBottom();
 
     try {
-      await http.post(
+      final res = await http.post(
         Uri.parse('https://wubachat.com/api/app_api.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'action': 'send_message',
           'user_id': widget.userId,
           'recipient': widget.phone,
-          'message': text,
+          'message': sendingText,
+          'sent_via': _selectedChannel,
+          'media_url': mediaUrl ?? '',
+          'media_type': mediaType ?? 'text',
+          'reply_to_wamid': sendingWamid ?? '',
         }),
       );
+      final d = jsonDecode(res.body);
+      if (d['status'] != true && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(d['message'] ?? 'Send failed')));
+      }
+      _fetchMessages(initial: false);
     } catch (_) {}
+  }
+
+  // --- LONG PRESS MESSAGE ACTIONS (REACTIONS, TRANSLATE, DELETE, REPLY) ---
+  void _showMessageOptions(Map<String, dynamic> msg) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Emoji Reaction Bar
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: ['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) {
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _reactToMessage(msg['id'], emoji);
+                    },
+                    child: Text(emoji, style: const TextStyle(fontSize: 30)),
+                  );
+                }).toList(),
+              ),
+              const Divider(height: 25),
+              ListTile(
+                leading: const Icon(Icons.reply, color: Color(0xFF008069)),
+                title: const Text('Reply'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _replyToWamid = msg['wamid'] ?? msg['id'].toString();
+                    _replyToText = msg['message_text'];
+                  });
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.translate, color: Color(0xFF008069)),
+                title: const Text('Translate to Hindi / Hinglish'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _translateMessage(msg['message_text']);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Delete Message'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmDelete(msg['id']);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _reactToMessage(dynamic msgId, String emoji) async {
+    try {
+      await http.post(
+        Uri.parse('https://wubachat.com/api/app_api.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': 'react_message',
+          'user_id': widget.userId,
+          'message_id': msgId,
+          'emoji': emoji,
+        }),
+      );
+      _fetchMessages();
+    } catch (_) {}
+  }
+
+  Future<void> _translateMessage(String text) async {
+    try {
+      final res = await http.post(
+        Uri.parse('https://wubachat.com/api/app_api.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': 'translate',
+          'user_id': widget.userId,
+          'text': text,
+          'target': 'hi',
+        }),
+      );
+      final d = jsonDecode(res.body);
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: const Row(children: [Icon(Icons.translate, color: Color(0xFF008069)), SizedBox(width: 8), Text('Translation')]),
+            content: Text(d['translated_text'] ?? text, style: const TextStyle(fontSize: 16)),
+            actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Close'))],
+          ),
+        );
+      }
+    } catch (_) {}
+  }
+
+  void _confirmDelete(dynamic msgId) {
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Delete Message?'),
+        content: const Text('Do you want to delete this message for everyone or just for you?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(c);
+              _deleteMessage(msgId, 'me');
+            },
+            child: const Text('Delete for Me'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(c);
+              _deleteMessage(msgId, 'everyone');
+            },
+            child: const Text('Delete for Everyone', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteMessage(dynamic msgId, String type) async {
+    try {
+      await http.post(
+        Uri.parse('https://wubachat.com/api/app_api.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': 'delete_message',
+          'user_id': widget.userId,
+          'message_id': msgId,
+          'delete_type': type,
+        }),
+      );
+      _fetchMessages();
+    } catch (_) {}
+  }
+
+  void _openAttachmentPicker() {
+    final urlController = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (c) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Send Media / Document Attachment', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 14),
+              TextField(
+                controller: urlController,
+                decoration: const InputDecoration(
+                  hintText: 'Enter direct image or document URL',
+                  prefixIcon: Icon(Icons.link),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.image),
+                      label: const Text('Send Image'),
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF008069), foregroundColor: Colors.white),
+                      onPressed: () {
+                        if (urlController.text.trim().isNotEmpty) {
+                          Navigator.pop(c);
+                          _sendMessage(mediaUrl: urlController.text.trim(), mediaType: 'image');
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.picture_as_pdf),
+                      label: const Text('Send PDF/Doc'),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white),
+                      onPressed: () {
+                        if (urlController.text.trim().isNotEmpty) {
+                          Navigator.pop(c);
+                          _sendMessage(mediaUrl: urlController.text.trim(), mediaType: 'document');
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -844,20 +1119,82 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         leadingWidth: 70,
         leading: Row(
           children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
-            ),
+            IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
             const CircleAvatar(radius: 16, backgroundColor: Colors.white24, child: Icon(Icons.person, color: Colors.white, size: 20)),
           ],
         ),
-        title: Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(
+              _selectedChannel == 'whatsapp' ? 'via Meta WhatsApp' : 'via Wubachat Free',
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+          ],
+        ),
         actions: [
           IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: () => _fetchMessages(initial: false)),
         ],
       ),
       body: Column(
         children: [
+          // -------------------------------------------------------------
+          // CHANNEL TOGGLE SWITCH BAR (WHATSAPP vs WUBACHAT FREE)
+          // -------------------------------------------------------------
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            color: const Color(0xFFDCF8C6).withOpacity(0.9),
+            child: Row(
+              children: [
+                const Icon(Icons.swap_horiz, size: 18, color: Color(0xFF0B4636)),
+                const SizedBox(width: 8),
+                const Text('Channel:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0B4636))),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => setState(() => _selectedChannel = 'whatsapp'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _selectedChannel == 'whatsapp' ? const Color(0xFF008069) : Colors.white,
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Text(
+                      '🟢 WhatsApp (Meta)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: _selectedChannel == 'whatsapp' ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => setState(() => _selectedChannel = 'wubachat'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _selectedChannel == 'wubachat' ? const Color(0xFF008069) : Colors.white,
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Text(
+                      '⚡ Wubachat (Free)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: _selectedChannel == 'wubachat' ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // -------------------------------------------------------------
+          // CHAT MESSAGES LIST
+          // -------------------------------------------------------------
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
@@ -869,25 +1206,111 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       final m = _messages[index];
                       final bool isMe = (m['direction'] == 'outbound' || m['is_me'] == 1);
                       final String text = m['message_text'] ?? '';
+                      final String mediaUrl = m['media_url'] ?? '';
+                      final String mediaType = m['message_type'] ?? 'text';
+                      final String status = m['status'] ?? 'sent';
+                      final String reaction = m['reaction'] ?? '';
                       final String time = m['created_at'] != null ? m['created_at'].toString().split(' ').last : '';
 
-                      return Align(
-                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                          decoration: BoxDecoration(
-                            color: isMe ? const Color(0xFFE7FFDB) : Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                      return GestureDetector(
+                        onLongPress: () => _showMessageOptions(m),
+                        child: Align(
+                          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                          child: Stack(
+                            clipBehavior: Clip.none,
                             children: [
-                              Text(text, style: const TextStyle(fontSize: 15)),
-                              const SizedBox(height: 3),
-                              Text(time, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                              Container(
+                                margin: const EdgeInsets.symmetric(vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+                                decoration: BoxDecoration(
+                                  color: isMe ? const Color(0xFFE7FFDB) : Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    // Image Bubble
+                                    if (mediaType == 'image' && mediaUrl.isNotEmpty) ...[
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.network(
+                                          mediaUrl,
+                                          height: 180,
+                                          width: double.infinity,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => const Row(children: [Icon(Icons.broken_image), Text(' Image Error')]),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                    ],
+
+                                    // Document Bubble
+                                    if (mediaType == 'document' && mediaUrl.isNotEmpty) ...[
+                                      GestureDetector(
+                                        onTap: () => launchUrl(Uri.parse(mediaUrl), mode: LaunchMode.externalApplication),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.picture_as_pdf, color: Colors.red, size: 28),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  mediaUrl.split('/').last,
+                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              const Icon(Icons.download, size: 18),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                    ],
+
+                                    // Text Content
+                                    if (text.isNotEmpty)
+                                      Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(text, style: const TextStyle(fontSize: 15)),
+                                      ),
+                                    const SizedBox(height: 4),
+
+                                    // Timestamp & Status Ticks
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(time, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                                        if (isMe) ...[
+                                          const SizedBox(width: 4),
+                                          _renderMessageTick(status),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // Floating Emoji Reaction Badge
+                              if (reaction.isNotEmpty)
+                                Positioned(
+                                  bottom: -4,
+                                  right: isMe ? 8 : null,
+                                  left: !isMe ? 8 : null,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(10),
+                                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 2)],
+                                    ),
+                                    child: Text(reaction, style: const TextStyle(fontSize: 12)),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -895,33 +1318,100 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     },
                   ),
           ),
+
+          // -------------------------------------------------------------
+          // REPLY CONTEXT PREVIEW
+          // -------------------------------------------------------------
+          if (_replyToWamid != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              color: Colors.grey.shade200,
+              child: Row(
+                children: [
+                  const Icon(Icons.reply, size: 18, color: Color(0xFF008069)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Replying: ${_replyToText ?? ""}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: Colors.black87),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () => setState(() {
+                      _replyToWamid = null;
+                      _replyToText = null;
+                    }),
+                  ),
+                ],
+              ),
+            ),
+
+          // -------------------------------------------------------------
+          // QUICK EMOJI DRAWER
+          // -------------------------------------------------------------
+          if (_showEmojiTray)
+            Container(
+              height: 48,
+              color: Colors.grey.shade100,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                children: _quickEmojis.map((e) {
+                  return GestureDetector(
+                    onTap: () {
+                      _msgController.text += e;
+                      _msgController.selection = TextSelection.fromPosition(TextPosition(offset: _msgController.text.length));
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      child: Text(e, style: const TextStyle(fontSize: 22)),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+
+          // -------------------------------------------------------------
+          // INPUT BAR (EMOJI, ATTACHMENT, SEND)
+          // -------------------------------------------------------------
           Container(
             padding: const EdgeInsets.all(8),
             child: Row(
               children: [
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(25)),
                     child: Row(
                       children: [
-                        const Icon(Icons.emoji_emotions_outlined, color: Colors.grey),
-                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: Icon(
+                            _showEmojiTray ? Icons.keyboard : Icons.emoji_emotions_outlined,
+                            color: Colors.grey.shade600,
+                          ),
+                          onPressed: () => setState(() => _showEmojiTray = !_showEmojiTray),
+                        ),
                         Expanded(
                           child: TextField(
                             controller: _msgController,
-                            decoration: const InputDecoration(hintText: 'Message', border: InputBorder.none),
+                            decoration: const InputDecoration(hintText: 'Type a message...', border: InputBorder.none),
                             onSubmitted: (_) => _sendMessage(),
                           ),
                         ),
-                        const Icon(Icons.attach_file, color: Colors.grey),
+                        IconButton(
+                          icon: const Icon(Icons.attach_file, color: Colors.grey),
+                          onPressed: _openAttachmentPicker,
+                        ),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(width: 6),
                 CircleAvatar(
-                  backgroundColor: const Color(0xFF00A884),
+                  backgroundColor: _selectedChannel == 'whatsapp' ? const Color(0xFF00A884) : const Color(0xFF0B4636),
                   child: IconButton(
                     icon: const Icon(Icons.send, color: Colors.white, size: 20),
                     onPressed: _sendMessage,
@@ -933,5 +1423,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         ],
       ),
     );
+  }
+
+  Widget _renderMessageTick(String status) {
+    if (status == 'read') {
+      return const Icon(Icons.done_all, size: 15, color: Color(0xFF34B7F1));
+    } else if (status == 'delivered') {
+      return const Icon(Icons.done_all, size: 15, color: Colors.grey);
+    } else {
+      return const Icon(Icons.done, size: 15, color: Colors.grey);
+    }
   }
 }
