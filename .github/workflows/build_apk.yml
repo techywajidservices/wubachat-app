@@ -29,8 +29,16 @@ jobs:
         run: |
           flutter create . --platforms=android --org com.wubachat --project-name wubachat
 
+      - name: Configure Android Permissions & App Name
+        run: |
+          sed -i '/<application/i <uses-permission android:name="android.permission.INTERNET"/>\n<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>' android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="wubachat"/android:label="Wubachat"/' android/app/src/main/AndroidManifest.xml
+
       - name: Install Dependencies
         run: flutter pub get
+
+      - name: Generate App Launcher Icons
+        run: dart run flutter_launcher_icons
 
       - name: Build Android Release APK
         run: flutter build apk --release --no-tree-shake-icons
