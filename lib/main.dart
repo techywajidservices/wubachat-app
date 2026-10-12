@@ -170,7 +170,7 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // =========================================================================
-// 2. DASHBOARD HOME (LIVE CHAT FILTERS, SEARCH, DYNAMIC QR WALLET)
+// 2. DASHBOARD HOME (DESKTOP SPLIT VIEW, FILTERS, SEARCH, DYNAMIC QR)
 // =========================================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -287,7 +287,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+                    decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
                     child: Column(
                       children: [
                         Image.network(qrUrl, height: 160, width: 160, fit: BoxFit.contain),
@@ -383,6 +383,51 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     } catch (_) {}
   }
 
+  void _openNewChatDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Start New Conversation'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Contact Name (Optional)')),
+            const SizedBox(height: 10),
+            TextField(controller: phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: '10-digit mobile number', prefixText: '+91 ')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A884), foregroundColor: Colors.white),
+            onPressed: () {
+              final num = phoneController.text.trim();
+              final cName = nameController.text.trim();
+              if (num.isNotEmpty) {
+                Navigator.pop(ctx);
+                final displayName = cName.isNotEmpty ? cName : '+91 $num';
+                if (MediaQuery.of(context).size.width > 750) {
+                  setState(() {
+                    activeChatPhone = '91$num';
+                    activeChatName = displayName;
+                  });
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => ChatDetailScreen(name: displayName, phone: '91$num', userId: userId, isEmbedded: false)),
+                  );
+                }
+              }
+            },
+            child: const Text('Chat'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -443,14 +488,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
           body: Column(
             children: [
-              // TOP RED ALERT BANNER (FROM DASHBOARD)
+              // TOP RED ALERT NOTICE BANNER
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                color: Colors.red.shade700,
+                color: const Color(0xFFC62828),
                 child: const Row(
                   children: [
-                    Icon(Icons.warning_amber, size: 14, color: Colors.amber),
+                    Icon(Icons.warning_amber_rounded, size: 14, color: Colors.amber),
                     SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -483,6 +528,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
             ],
           ),
+          floatingActionButton: isDesktop
+              ? null
+              : FloatingActionButton(
+                  backgroundColor: const Color(0xFF00A884),
+                  child: const Icon(Icons.chat, color: Colors.white),
+                  onPressed: () => _openNewChatDialog(context),
+                ),
         );
       },
     );
@@ -491,12 +543,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget _buildChatsListSection({required bool isDesktop}) {
     return Column(
       children: [
-        // SEARCH BOX
+        // SEARCH INPUT BOX
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
           child: Container(
             height: 38,
-            decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(20)),
+            decoration: BoxDecoration(color: const Color(0xFFF0F2F5), borderRadius: BorderRadius.circular(20)),
             child: TextField(
               controller: searchController,
               decoration: const InputDecoration(
@@ -514,7 +566,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         ),
 
-        // FILTER TABS (ALL, UNREAD, IMPORTANT, ARCHIVE)
+        // FILTER TABS (ALL, UNREAD, FAVOURITES, IMPORTANT, ARCHIVE)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: SingleChildScrollView(
@@ -525,6 +577,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 const SizedBox(width: 6),
                 _filterChip('unread', 'Unread'),
                 const SizedBox(width: 6),
+                _filterChip('favourites', 'Favourites'),
+                const SizedBox(width: 6),
                 _filterChip('important', 'Important'),
                 const SizedBox(width: 6),
                 _filterChip('archive', 'Archive'),
@@ -534,7 +588,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
         const Divider(height: 1),
 
-        // CONTACTS LIST
+        // CONVERSATIONS LIST
         Expanded(
           child: isLoadingChats
               ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
@@ -552,20 +606,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         final isOutbound = chat['last_direction'] == 'outbound';
                         final isSelected = isDesktop && activeChatPhone == phone;
 
+                        final initialText = name.isNotEmpty ? (name.length >= 2 ? name.substring(0, 2) : name.substring(0, 1)).toUpperCase() : 'U';
+
                         return Container(
-                          color: isSelected ? Colors.grey.shade200 : Colors.white,
+                          color: isSelected ? const Color(0xFFE9EDEF) : Colors.white,
                           child: ListTile(
                             leading: CircleAvatar(
                               radius: 24,
                               backgroundColor: const Color(0xFF25D366).withOpacity(0.18),
-                              child: Text(name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF008069))),
+                              child: Text(initialText, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF008069))),
                             ),
                             title: Row(
                               children: [
                                 Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5), overflow: TextOverflow.ellipsis)),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                  decoration: BoxDecoration(color: Colors.emerald.shade50, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.emerald.shade200)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                  decoration: BoxDecoration(color: const Color(0xFFD1FAE5), borderRadius: BorderRadius.circular(4), border: Border.all(color: const Color(0xFFA7F3D0))),
                                   child: const Text('✓✓ Synced', style: TextStyle(fontSize: 8.5, color: Color(0xFF008069), fontWeight: FontWeight.bold)),
                                 ),
                               ],
@@ -616,7 +672,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE7FCE3) : Colors.grey.shade100,
+          color: isSelected ? const Color(0xFFE7FCE3) : const Color(0xFFF0F2F5),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: isSelected ? const Color(0xFF008069) : Colors.transparent),
         ),
@@ -681,7 +737,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 }
 
 // =========================================================================
-// 3. CHAT ROOM (DUAL SEND BUTTONS, TEMPLATES, REACTIONS, TRANSLATE)
+// 3. CHAT ROOM (DUAL ACTION BUTTONS, TEMPLATES, REACTIONS, TRANSLATE)
 // =========================================================================
 class ChatDetailScreen extends StatefulWidget {
   final String name;
@@ -773,7 +829,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     } catch (_) {}
   }
 
-  // --- PARAMOUNT SURVEY TEMPLATE (CLAIM, VEHICLE, LINK) ---
   void _openSurveyTemplateModal() {
     final claimController = TextEditingController();
     final vehicleController = TextEditingController();
@@ -809,7 +864,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               await http.post(
                 Uri.parse('https://wubachat.com/api/app_api.php'),
                 headers: {'Content-Type': 'application/json'},
-                body: jsonEncode({'action': 'send_message', 'user_id': widget.userId, 'recipient': widget.phone, 'mode': 'template', 'claim_number': c, 'vehicle_number': v, 'inspection_link': l}),
+                body: jsonEncode({
+                  'action': 'send_message',
+                  'user_id': widget.userId,
+                  'recipient': widget.phone,
+                  'mode': 'template',
+                  'claim_number': c,
+                  'vehicle_number': v,
+                  'inspection_link': l
+                }),
               );
               _fetchMessages();
             },
@@ -820,7 +883,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
-  // --- TRANSLATE INPUT TEXT ---
   Future<void> _translateInputText() async {
     final text = _msgController.text.trim();
     if (text.isEmpty) return;
@@ -837,7 +899,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     } catch (_) {}
   }
 
-  // --- MESSAGE POPUP ACTION BAR (REPLY, REACT, TRANSLATE, DELETE) ---
   void _showMessageOptions(Map<String, dynamic> msg) {
     showModalBottomSheet(
       context: context,
@@ -879,6 +940,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 },
               ),
               ListTile(
+                leading: const Icon(Icons.copy, color: Color(0xFF008069)),
+                title: const Text('Copy Text'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.translate, color: Color(0xFF008069)),
                 title: const Text('Translate Message'),
                 onTap: () async {
@@ -902,16 +971,19 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 },
               ),
               ListTile(
+                leading: const Icon(Icons.info_outline, color: Color(0xFF008069)),
+                title: const Text('Message Info'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openMessageInfoModal(msg);
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.delete, color: Colors.red),
                 title: const Text('Delete Message'),
-                onTap: () async {
+                onTap: () {
                   Navigator.pop(ctx);
-                  await http.post(
-                    Uri.parse('https://wubachat.com/api/app_api.php'),
-                    headers: {'Content-Type': 'application/json'},
-                    body: jsonEncode({'action': 'delete_message', 'user_id': widget.userId, 'message_id': msg['id'], 'delete_type': 'everyone'}),
-                  );
-                  _fetchMessages();
+                  _confirmDeleteMessage(msg);
                 },
               ),
             ],
@@ -921,7 +993,100 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
-  // --- CONTACT INFO & MEDIA DRAWER ---
+  void _openMessageInfoModal(Map<String, dynamic> msg) {
+    final status = (msg['status'] ?? 'sent').toString().toUpperCase();
+    final time = msg['created_at']?.toString() ?? 'Just now';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.info_outline, color: Color(0xFF008069)),
+            SizedBox(width: 8),
+            Text('Message Info', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: const Color(0xFFF0F2F5), borderRadius: BorderRadius.circular(8)),
+              child: Text(msg['message_text'] ?? '', style: const TextStyle(fontSize: 13)),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(children: [Icon(Icons.done_all, color: Color(0xFF34B7F1), size: 16), SizedBox(width: 6), Text('Read')]),
+                Text(status == 'READ' ? time : 'Not read yet', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ],
+            ),
+            const Divider(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(children: [Icon(Icons.done_all, color: Colors.grey, size: 16), SizedBox(width: 6), Text('Delivered')]),
+                Text(status == 'DELIVERED' || status == 'READ' ? time : 'Pending', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ],
+            ),
+            const Divider(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(children: [Icon(Icons.done, color: Colors.grey, size: 16), SizedBox(width: 6), Text('Sent')]),
+                Text(time, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ],
+            ),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  void _confirmDeleteMessage(Map<String, dynamic> msg) {
+    final isMe = (msg['direction'] == 'outbound' || msg['is_me'] == 1);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Message?'),
+        content: Text(isMe ? 'Do you want to delete this message for everyone or just for you?' : 'Delete this message for yourself?'),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await http.post(
+                Uri.parse('https://wubachat.com/api/app_api.php'),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({'action': 'delete_message', 'user_id': widget.userId, 'message_id': msg['id'], 'delete_type': 'me'}),
+              );
+              _fetchMessages();
+            },
+            child: const Text('Delete for Me'),
+          ),
+          if (isMe)
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await http.post(
+                  Uri.parse('https://wubachat.com/api/app_api.php'),
+                  headers: {'Content-Type': 'application/json'},
+                  body: jsonEncode({'action': 'delete_message', 'user_id': widget.userId, 'message_id': msg['id'], 'delete_type': 'everyone'}),
+                );
+                _fetchMessages();
+              },
+              child: const Text('Delete for Everyone'),
+            ),
+        ],
+      ),
+    );
+  }
+
   void _openContactDrawer() async {
     final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=get_contact_info&user_id=${widget.userId}&phone=${widget.phone}'));
     final data = jsonDecode(res.body);
@@ -935,7 +1100,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircleAvatar(radius: 30, backgroundColor: const Color(0xFF008069), child: Text(widget.name.substring(0, 1), style: const TextStyle(color: Colors.white, fontSize: 24))),
+              CircleAvatar(
+                radius: 30,
+                backgroundColor: const Color(0xFF008069),
+                child: Text(widget.name.isNotEmpty ? widget.name.substring(0, 1).toUpperCase() : 'U', style: const TextStyle(color: Colors.white, fontSize: 24)),
+              ),
               const SizedBox(height: 10),
               Text(widget.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               Text('+${widget.phone}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
@@ -943,7 +1112,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               Text(data['bio'] ?? 'Hey there! I am using WhatsApp.', style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
               const Divider(height: 25),
               ListTile(
-                leading: const Icon(Icons.ban, color: Colors.red),
+                leading: const Icon(Icons.block, color: Colors.red),
                 title: Text(data['is_blocked'] == true ? 'Unblock Contact' : 'Block Contact', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                 onTap: () async {
                   Navigator.pop(ctx);
@@ -974,7 +1143,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold)),
-              const Text('⚡ On Wubachat (Free)', style: TextStyle(color: Colors.white70, fontSize: 10)),
+              const Text('⚡ On Wubachat (Free) • Tap for Info', style: TextStyle(color: Colors.white70, fontSize: 10)),
             ],
           ),
         ),
@@ -1049,11 +1218,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   ),
           ),
 
-          // REPLY BANNER
+          // REPLY PREVIEW STRIP
           if (_replyToWamid != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              color: Colors.grey.shade200,
+              color: const Color(0xFFEEEEEE),
               child: Row(
                 children: [
                   const Icon(Icons.reply, size: 16, color: Color(0xFF008069)),
@@ -1064,7 +1233,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               ),
             ),
 
-          // BOTTOM SEND BAR (TRANSLATE DROPDOWN + DUAL ACTION BUTTONS)
+          // INPUT & DUAL SEND BUTTON BAR
           Container(
             padding: const EdgeInsets.all(8),
             color: Colors.white,
@@ -1072,10 +1241,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               children: [
                 Row(
                   children: [
-                    // Language Dropdown
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6),
-                      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
                       child: DropdownButton<String>(
                         value: _selectedLang,
                         underline: const SizedBox(),
@@ -1088,7 +1256,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                         onChanged: (val) => setState(() => _selectedLang = val!),
                       ),
                     ),
-                    IconButton(icon: const Icon(Icons.language, color: Color(0xFF008069), size: 18), onPressed: _translateInputText, tooltip: 'Translate Input'),
+                    IconButton(icon: const Icon(Icons.translate, color: Color(0xFF008069), size: 18), onPressed: _translateInputText, tooltip: 'Translate Input'),
                     Expanded(
                       child: TextField(
                         controller: _msgController,
@@ -1098,7 +1266,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                // DUAL SEND BUTTONS (FROM SCREENSHOT 3)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
