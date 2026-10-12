@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -400,7 +401,7 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // =========================================================================
-// 2. WHATSAPP STYLE HOME SCREEN (LIVE CHATS, TOOLS, WALLET)
+// 2. HOME DASHBOARD (AUTO-SYNCING CHATS, TOOLS, WALLET)
 // =========================================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -411,6 +412,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  Timer? _homePollTimer;
   String userId = '1';
   String userName = 'User';
   double balance = 0.0;
@@ -422,6 +424,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadInitialData();
+    // Auto-polling for chat list every 5 seconds
+    _homePollTimer = Timer.periodic(const Duration(seconds: 5), (_) => fetchLiveChats(background: true));
+  }
+
+  @override
+  void dispose() {
+    _homePollTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadInitialData() async {
@@ -431,11 +441,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       userName = prefs.getString('user_name') ?? 'User';
       balance = prefs.getDouble('balance') ?? 0.0;
     });
-    fetchLiveChats();
+    fetchLiveChats(background: false);
   }
 
-  Future<void> fetchLiveChats() async {
-    setState(() => isLoadingChats = true);
+  Future<void> fetchLiveChats({bool background = false}) async {
+    if (!background) setState(() => isLoadingChats = true);
     try {
       final res = await http.get(
         Uri.parse('https://web.wubachat.com/api/app_api.php?action=get_chats&user_id=$userId'),
@@ -447,7 +457,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         });
       }
     } catch (_) {}
-    if (mounted) setState(() => isLoadingChats = false);
+    if (!background && mounted) setState(() => isLoadingChats = false);
+  }
+
+  Future<void> _launchURL(String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      debugPrint('Could not launch $url');
+    }
   }
 
   Future<void> _logout() async {
@@ -474,17 +491,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: fetchLiveChats,
+            onPressed: () => fetchLiveChats(background: false),
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.white),
             onSelected: (val) {
-              if (val == 'logout') _logout();
+              if (val == 'broadcast') {
+                _launchURL('https://web.wubachat.com/broadcast.php');
+              } else if (val == 'linked') {
+                _launchURL('https://web.wubachat.com/meta_setup.php');
+              } else if (val == 'logout') {
+                _logout();
+              }
             },
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'broadcast', child: Text('New Broadcast')),
               const PopupMenuItem(value: 'linked', child: Text('Linked Devices (Meta)')),
-              const PopupMenuItem(value: 'settings', child: Text('Settings')),
               const PopupMenuItem(value: 'logout', child: Text('Logout', style: TextStyle(color: Colors.red))),
             ],
           ),
@@ -545,7 +567,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
 
     return RefreshIndicator(
-      onRefresh: fetchLiveChats,
+      onRefresh: () => fetchLiveChats(background: false),
       child: ListView.separated(
         itemCount: chatList.length,
         separatorBuilder: (context, index) => const Divider(height: 1, indent: 75),
@@ -586,7 +608,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   builder: (context) => ChatDetailScreen(name: name, phone: phone, userId: userId),
                 ),
               );
-              fetchLiveChats();
+              fetchLiveChats(background: true);
             },
           );
         },
@@ -605,29 +627,33 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           title: 'mParivahan RC & DL Verification',
           subtitle: 'Instant vehicle details verification engine',
           badge: 'Services API',
+          url: 'https://services.techywajid.com',
         ),
         _toolCard(
           icon: Icons.picture_as_pdf,
           title: 'PDF to Excel Data Extractor',
           subtitle: 'Parse tabular documents directly into spreadsheets',
           badge: 'Online Tool',
+          url: 'https://services.techywajid.com',
         ),
         _toolCard(
           icon: Icons.campaign,
           title: 'Official WhatsApp Bulk Campaign',
           subtitle: 'Send approved templates via Meta Cloud API',
           badge: 'Wubachat Core',
+          url: 'https://web.wubachat.com/broadcast.php',
         ),
       ],
     );
   }
 
-  Widget _toolCard({required IconData icon, required String title, required String subtitle, required String badge}) {
+  Widget _toolCard({required IconData icon, required String title, required String subtitle, required String badge, required String url}) {
     return Card(
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: ListTile(
+        onTap: () => _launchURL(url),
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(color: const Color(0xFF008069).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
@@ -663,7 +689,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 Text('₹${balance.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 14),
                 ElevatedButton.icon(
-                  onPressed: () {},
+                  onPressed: () => _launchURL('https://web.wubachat.com/recharge.php'),
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('Add Credit'),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF008069)),
@@ -725,7 +751,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 }
 
 // =========================================================================
-// 3. WHATSAPP LIVE CONVERSATION SCREEN (SEND & RECEIVE)
+// 3. WHATSAPP CHAT DETAIL SCREEN (WITH REAL-TIME 3s AUTO-POLLING)
 // =========================================================================
 class ChatDetailScreen extends StatefulWidget {
   final String name;
@@ -740,28 +766,58 @@ class ChatDetailScreen extends StatefulWidget {
 
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _msgController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  Timer? _chatPollingTimer;
   List<dynamic> _messages = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _fetchMessages();
+    _fetchMessages(initial: true);
+    // Real-time live polling every 3 seconds for new incoming WhatsApp messages
+    _chatPollingTimer = Timer.periodic(const Duration(seconds: 3), (_) => _fetchMessages(initial: false));
   }
 
-  Future<void> _fetchMessages() async {
+  @override
+  void dispose() {
+    _chatPollingTimer?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchMessages({bool initial = false}) async {
     try {
       final res = await http.get(
         Uri.parse('https://web.wubachat.com/api/app_api.php?action=get_messages&user_id=${widget.userId}&phone=${widget.phone}'),
       );
       final data = jsonDecode(res.body);
       if (data['status'] == true && mounted) {
-        setState(() {
-          _messages = data['messages'] ?? [];
-        });
+        final List<dynamic> newMsgs = data['messages'] ?? [];
+        if (newMsgs.length != _messages.length) {
+          setState(() {
+            _messages = newMsgs;
+          });
+          _scrollToBottom();
+        }
       }
     } catch (_) {}
-    if (mounted) setState(() => _isLoading = false);
+    if (initial && mounted) {
+      setState(() => _isLoading = false);
+      _scrollToBottom();
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+    });
   }
 
   Future<void> _sendMessage() async {
@@ -777,6 +833,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         'created_at': 'Just now',
       });
     });
+    _scrollToBottom();
 
     try {
       await http.post(
@@ -810,7 +867,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         ),
         title: Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: _fetchMessages),
+          IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: () => _fetchMessages(initial: false)),
         ],
       ),
       body: Column(
@@ -819,6 +876,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
                 : ListView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
@@ -867,6 +925,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                           child: TextField(
                             controller: _msgController,
                             decoration: const InputDecoration(hintText: 'Message', border: InputBorder.none),
+                            onSubmitted: (_) => _sendMessage(),
                           ),
                         ),
                         const Icon(Icons.attach_file, color: Colors.grey),
