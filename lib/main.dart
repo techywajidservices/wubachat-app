@@ -35,7 +35,7 @@ class WubachatApp extends StatelessWidget {
 }
 
 // =========================================================================
-// 1. AUTH SCREEN (LOGIN & REGISTER)
+// 1. AUTH SCREEN (SINGLE CLEAN LOGO & MAIN DOMAIN API)
 // =========================================================================
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -69,7 +69,8 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => isLoading = true);
 
     try {
-      final url = Uri.parse('https://web.wubachat.com/api/app_auth.php');
+      // Main Domain URL: wubachat.com
+      final url = Uri.parse('https://wubachat.com/api/app_auth.php');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -81,6 +82,10 @@ class _AuthScreenState extends State<AuthScreen> {
           'name': name,
         }),
       );
+
+      if (response.body.trim().isEmpty) {
+        throw Exception('Server returned blank response. Check api/app_auth.php');
+      }
 
       final data = jsonDecode(response.body);
 
@@ -109,7 +114,7 @@ class _AuthScreenState extends State<AuthScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Server connection error: $e')),
+          SnackBar(content: Text('Connection error: $e')),
         );
       }
     } finally {
@@ -136,11 +141,12 @@ class _AuthScreenState extends State<AuthScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 28.0),
                 child: Column(
                   children: [
-                    const SizedBox(height: 35),
+                    const SizedBox(height: 45),
                     Center(
                       child: Image.asset(
                         'assets/logo.png',
-                        height: 95,
+                        height: 110,
+                        fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) => const Icon(
                           Icons.chat_bubble_rounded,
                           size: 80,
@@ -148,25 +154,7 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'wubachat',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0B4636),
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const Text(
-                      'Fast & Friendly Chats',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF0B4636),
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                    const SizedBox(height: 25),
+                    const SizedBox(height: 30),
                     Row(
                       children: [
                         Expanded(
@@ -401,7 +389,7 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // =========================================================================
-// 2. HOME DASHBOARD (AUTO-SYNCING CHATS, TOOLS, WALLET)
+// 2. DASHBOARD (MAIN DOMAIN wubachat.com)
 // =========================================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -424,7 +412,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadInitialData();
-    // Auto-polling for chat list every 5 seconds
     _homePollTimer = Timer.periodic(const Duration(seconds: 5), (_) => fetchLiveChats(background: true));
   }
 
@@ -448,7 +435,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (!background) setState(() => isLoadingChats = true);
     try {
       final res = await http.get(
-        Uri.parse('https://web.wubachat.com/api/app_api.php?action=get_chats&user_id=$userId'),
+        Uri.parse('https://wubachat.com/api/app_api.php?action=get_chats&user_id=$userId'),
       );
       final data = jsonDecode(res.body);
       if (data['status'] == true && mounted) {
@@ -497,9 +484,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             icon: const Icon(Icons.more_vert, color: Colors.white),
             onSelected: (val) {
               if (val == 'broadcast') {
-                _launchURL('https://web.wubachat.com/broadcast.php');
+                _launchURL('https://wubachat.com/broadcast.php');
               } else if (val == 'linked') {
-                _launchURL('https://web.wubachat.com/meta_setup.php');
+                _launchURL('https://wubachat.com/meta_setup.php');
               } else if (val == 'logout') {
                 _logout();
               }
@@ -641,7 +628,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           title: 'Official WhatsApp Bulk Campaign',
           subtitle: 'Send approved templates via Meta Cloud API',
           badge: 'Wubachat Core',
-          url: 'https://web.wubachat.com/broadcast.php',
+          url: 'https://wubachat.com/broadcast.php',
         ),
       ],
     );
@@ -689,7 +676,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 Text('₹${balance.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 14),
                 ElevatedButton.icon(
-                  onPressed: () => _launchURL('https://web.wubachat.com/recharge.php'),
+                  onPressed: () => _launchURL('https://wubachat.com/recharge.php'),
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('Add Credit'),
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF008069)),
@@ -751,7 +738,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 }
 
 // =========================================================================
-// 3. WHATSAPP CHAT DETAIL SCREEN (WITH REAL-TIME 3s AUTO-POLLING)
+// 3. WHATSAPP LIVE CONVERSATION (MAIN DOMAIN wubachat.com)
 // =========================================================================
 class ChatDetailScreen extends StatefulWidget {
   final String name;
@@ -775,7 +762,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   void initState() {
     super.initState();
     _fetchMessages(initial: true);
-    // Real-time live polling every 3 seconds for new incoming WhatsApp messages
     _chatPollingTimer = Timer.periodic(const Duration(seconds: 3), (_) => _fetchMessages(initial: false));
   }
 
@@ -789,7 +775,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   Future<void> _fetchMessages({bool initial = false}) async {
     try {
       final res = await http.get(
-        Uri.parse('https://web.wubachat.com/api/app_api.php?action=get_messages&user_id=${widget.userId}&phone=${widget.phone}'),
+        Uri.parse('https://wubachat.com/api/app_api.php?action=get_messages&user_id=${widget.userId}&phone=${widget.phone}'),
       );
       final data = jsonDecode(res.body);
       if (data['status'] == true && mounted) {
@@ -837,7 +823,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
     try {
       await http.post(
-        Uri.parse('https://web.wubachat.com/api/app_api.php'),
+        Uri.parse('https://wubachat.com/api/app_api.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'action': 'send_message',
