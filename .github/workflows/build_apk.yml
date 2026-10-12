@@ -1,9 +1,12 @@
-name: Build Wubachat APK
+name: Build Wubachat App & Web Preview
 
 on:
   push:
     branches: [ main, master ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -27,7 +30,7 @@ jobs:
 
       - name: Generate Android Platform Files
         run: |
-          flutter create . --platforms=android --org com.wubachat --project-name wubachat
+          flutter create . --platforms=android,web --org com.wubachat --project-name wubachat
 
       - name: Configure Android Permissions & App Name
         run: |
@@ -39,6 +42,15 @@ jobs:
 
       - name: Generate App Launcher Icons
         run: dart run flutter_launcher_icons
+
+      - name: Build Web for Desktop Preview
+        run: flutter build web --release --base-href "/wubachat-app/"
+
+      - name: Deploy Web Preview to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/web
 
       - name: Build Android Release APK
         run: flutter build apk --release --no-tree-shake-icons
