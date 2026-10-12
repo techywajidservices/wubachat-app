@@ -106,18 +106,9 @@ class _AuthScreenState extends State<AuthScreen> {
         }
       }
     } catch (e) {
-      // Demo / Offline fallback testing ke liye
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('user_id', '1');
-      await prefs.setString('user_name', name.isNotEmpty ? name : 'Wajid Ali');
-      await prefs.setString('user_phone', phone);
-      await prefs.setString('user_role', selectedRole);
-      await prefs.setDouble('balance', 10.0);
-
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Server connection error: $e')),
         );
       }
     } finally {
@@ -409,7 +400,7 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // =========================================================================
-// 2. WHATSAPP STYLE HOME SCREEN (CHATS, TOOLS, WALLET)
+// 2. WHATSAPP STYLE HOME SCREEN (LIVE CHATS, TOOLS, WALLET)
 // =========================================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -420,22 +411,43 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  String userId = '1';
   String userName = 'User';
   double balance = 0.0;
+  List<dynamic> chatList = [];
+  bool isLoadingChats = true;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _loadUserData();
+    _loadInitialData();
   }
 
-  Future<void> _loadUserData() async {
+  Future<void> _loadInitialData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
+      userId = prefs.getString('user_id') ?? '1';
       userName = prefs.getString('user_name') ?? 'User';
       balance = prefs.getDouble('balance') ?? 0.0;
     });
+    fetchLiveChats();
+  }
+
+  Future<void> fetchLiveChats() async {
+    setState(() => isLoadingChats = true);
+    try {
+      final res = await http.get(
+        Uri.parse('https://web.wubachat.com/api/app_api.php?action=get_chats&user_id=$userId'),
+      );
+      final data = jsonDecode(res.body);
+      if (data['status'] == true && mounted) {
+        setState(() {
+          chatList = data['chats'] ?? [];
+        });
+      }
+    } catch (_) {}
+    if (mounted) setState(() => isLoadingChats = false);
   }
 
   Future<void> _logout() async {
@@ -457,12 +469,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           'Wubachat',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 21, color: Colors.white),
         ),
-        backgroundColor: const Color(0xFF008069), // Classic WhatsApp Green
+        backgroundColor: const Color(0xFF008069),
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.search, color: Colors.white),
-            onPressed: () {},
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: fetchLiveChats,
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.white),
@@ -507,61 +519,81 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // --- TAB 1: CHATS LIST ---
   Widget _buildChatsTab() {
-    final mockChats = [
-      {'name': 'Meta WhatsApp Cloud API', 'msg': 'Session active. Ready to broadcast.', 'time': '10:45 AM', 'unread': 1},
-      {'name': 'Support Helpline', 'msg': 'Welcome to Wubachat! Let us know if you need help.', 'time': 'Yesterday', 'unread': 0},
-      {'name': 'National Survey Team', 'msg': 'Vehicle claims verification sync updated.', 'time': '09/10/26', 'unread': 0},
-    ];
+    if (isLoadingChats) {
+      return const Center(child: CircularProgressIndicator(color: Color(0xFF008069)));
+    }
 
-    return ListView.separated(
-      itemCount: mockChats.length,
-      separatorBuilder: (context, index) => const Divider(height: 1, indent: 75),
-      itemBuilder: (context, index) {
-        final chat = mockChats[index];
-        return ListTile(
-          leading: CircleAvatar(
-            radius: 26,
-            backgroundColor: const Color(0xFF25D366).withOpacity(0.18),
-            child: const Icon(Icons.person, color: Color(0xFF008069), size: 30),
-          ),
-          title: Text(chat['name'] as String, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          subtitle: Text(
-            chat['msg'] as String,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 13.5),
-          ),
-          trailing: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(chat['time'] as String, style: const TextStyle(fontSize: 11.5, color: Colors.grey)),
-              const SizedBox(height: 4),
-              if ((chat['unread'] as int) > 0)
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(color: Color(0xFF25D366), shape: BoxShape.circle),
-                  child: Text(
-                    '${chat['unread']}',
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
+    if (chatList.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey.shade400),
+            const SizedBox(height: 12),
+            const Text('No conversations yet', style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              onPressed: () => _openNewChatDialog(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Start First WhatsApp Chat'),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF008069), foregroundColor: Colors.white),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: fetchLiveChats,
+      child: ListView.separated(
+        itemCount: chatList.length,
+        separatorBuilder: (context, index) => const Divider(height: 1, indent: 75),
+        itemBuilder: (context, index) {
+          final chat = chatList[index];
+          final name = chat['contact_name'] ?? ('+' + (chat['phone_number'] ?? ''));
+          final phone = chat['phone_number'] ?? '';
+          final lastMsg = chat['last_msg'] ?? 'Tap to chat';
+          final unread = (chat['unread_count'] as num?)?.toInt() ?? 0;
+
+          return ListTile(
+            leading: CircleAvatar(
+              radius: 26,
+              backgroundColor: const Color(0xFF25D366).withOpacity(0.18),
+              child: const Icon(Icons.person, color: Color(0xFF008069), size: 30),
+            ),
+            title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            subtitle: Text(
+              lastMsg,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13.5),
+            ),
+            trailing: unread > 0
+                ? Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: const BoxDecoration(color: Color(0xFF25D366), shape: BoxShape.circle),
+                    child: Text(
+                      '$unread',
+                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  )
+                : null,
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatDetailScreen(name: name, phone: phone, userId: userId),
                 ),
-            ],
-          ),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => ChatDetailScreen(name: chat['name'] as String)),
-            );
-          },
-        );
-      },
+              );
+              fetchLiveChats();
+            },
+          );
+        },
+      ),
     );
   }
 
-  // --- TAB 2: TOOLS MODULE ---
   Widget _buildToolsTab() {
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -612,7 +644,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // --- TAB 3: WALLET & ACCOUNT ---
   Widget _buildWalletTab() {
     return Padding(
       padding: const EdgeInsets.all(20.0),
@@ -631,15 +662,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 const SizedBox(height: 6),
                 Text('₹${balance.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 14),
-                Row(
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('Add Credit'),
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF008069)),
-                    ),
-                  ],
+                ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Credit'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF008069)),
                 ),
               ],
             ),
@@ -683,7 +710,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 Navigator.pop(ctx);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => ChatDetailScreen(name: '+91 $num')),
+                  MaterialPageRoute(
+                    builder: (context) => ChatDetailScreen(name: '+91 $num', phone: '91$num', userId: userId),
+                  ),
                 );
               }
             },
@@ -696,11 +725,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 }
 
 // =========================================================================
-// 3. WHATSAPP CHAT ROOM DETAIL SCREEN
+// 3. WHATSAPP LIVE CONVERSATION SCREEN (SEND & RECEIVE)
 // =========================================================================
 class ChatDetailScreen extends StatefulWidget {
   final String name;
-  const ChatDetailScreen({super.key, required this.name});
+  final String phone;
+  final String userId;
+
+  const ChatDetailScreen({super.key, required this.name, required this.phone, required this.userId});
 
   @override
   State<ChatDetailScreen> createState() => _ChatDetailScreenState();
@@ -708,23 +740,62 @@ class ChatDetailScreen extends StatefulWidget {
 
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _msgController = TextEditingController();
-  final List<Map<String, dynamic>> _messages = [
-    {'text': 'Hello! How can I help you today?', 'isMe': false, 'time': '10:40 AM'},
-  ];
+  List<dynamic> _messages = [];
+  bool _isLoading = true;
 
-  void _sendMessage() {
+  @override
+  void initState() {
+    super.initState();
+    _fetchMessages();
+  }
+
+  Future<void> _fetchMessages() async {
+    try {
+      final res = await http.get(
+        Uri.parse('https://web.wubachat.com/api/app_api.php?action=get_messages&user_id=${widget.userId}&phone=${widget.phone}'),
+      );
+      final data = jsonDecode(res.body);
+      if (data['status'] == true && mounted) {
+        setState(() {
+          _messages = data['messages'] ?? [];
+        });
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _sendMessage() async {
     final text = _msgController.text.trim();
     if (text.isEmpty) return;
-    setState(() {
-      _messages.add({'text': text, 'isMe': true, 'time': 'Now'});
-    });
+
     _msgController.clear();
+    setState(() {
+      _messages.add({
+        'message_text': text,
+        'direction': 'outbound',
+        'is_me': 1,
+        'created_at': 'Just now',
+      });
+    });
+
+    try {
+      await http.post(
+        Uri.parse('https://web.wubachat.com/api/app_api.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'action': 'send_message',
+          'user_id': widget.userId,
+          'recipient': widget.phone,
+          'message': text,
+        }),
+      );
+    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEFE7DE), // Classic WhatsApp Chat Wallpaper tone
+      backgroundColor: const Color(0xFFEFE7DE),
       appBar: AppBar(
         backgroundColor: const Color(0xFF008069),
         leadingWidth: 70,
@@ -739,42 +810,46 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         ),
         title: Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(icon: const Icon(Icons.call, color: Colors.white), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.more_vert, color: Colors.white), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: _fetchMessages),
         ],
       ),
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final m = _messages[index];
-                final bool isMe = m['isMe'] as bool;
-                return Align(
-                  alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                    decoration: BoxDecoration(
-                      color: isMe ? const Color(0xFFE7FFDB) : Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(m['text'] as String, style: const TextStyle(fontSize: 15)),
-                        const SizedBox(height: 3),
-                        Text(m['time'] as String, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
-                      ],
-                    ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final m = _messages[index];
+                      final bool isMe = (m['direction'] == 'outbound' || m['is_me'] == 1);
+                      final String text = m['message_text'] ?? '';
+                      final String time = m['created_at'] != null ? m['created_at'].toString().split(' ').last : '';
+
+                      return Align(
+                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                          decoration: BoxDecoration(
+                            color: isMe ? const Color(0xFFE7FFDB) : Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 2, offset: const Offset(0, 1))],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(text, style: const TextStyle(fontSize: 15)),
+                              const SizedBox(height: 3),
+                              Text(time, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
           Container(
             padding: const EdgeInsets.all(8),
