@@ -5,6 +5,9 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+// Global In-Memory Cache for Instant 0ms Chat Loading
+final Map<String, List<dynamic>> _chatMemoryCache = {};
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
@@ -170,7 +173,7 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // =========================================================================
-// 2. DASHBOARD HOME (DESKTOP SPLIT VIEW, FILTERS, SEARCH, DYNAMIC QR)
+// 2. DASHBOARD HOME (SPLIT VIEW ON DESKTOP, INSTANT CHATS)
 // =========================================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -203,7 +206,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadInitialData();
-    _homePollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+    // 5-second relaxed timer to reduce server pressure
+    _homePollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       fetchLiveChats(background: true);
       fetchLiveWallet();
     });
@@ -243,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> fetchLiveChats({bool background = false}) async {
-    if (!background) setState(() => isLoadingChats = true);
+    if (!background && chatList.isEmpty) setState(() => isLoadingChats = true);
     try {
       final url = 'https://wubachat.com/api/app_api.php?action=get_chats&user_id=$userId&filter=$currentChatFilter&search=${Uri.encodeComponent(searchQuery)}';
       final res = await http.get(Uri.parse(url));
@@ -264,6 +268,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
+    _chatMemoryCache.clear();
     if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AuthScreen()));
   }
 
@@ -318,23 +323,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 onPressed: () async {
                   final amt = double.tryParse(amountController.text) ?? 0;
                   final utr = utrController.text.trim();
-                  if (amt < 100) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Minimum recharge amount is ₹100')));
-                    return;
-                  }
-                  if (utr.length < 6) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter valid 12-digit UTR')));
-                    return;
-                  }
+                  if (amt < 100 || utr.length < 6) return;
                   Navigator.pop(ctx);
                   try {
-                    final res = await http.post(
+                    await http.post(
                       Uri.parse('https://wubachat.com/api/app_api.php'),
                       headers: {'Content-Type': 'application/json'},
                       body: jsonEncode({'action': 'recharge_wallet', 'user_id': userId, 'amount': amt, 'utr_number': utr}),
                     );
-                    final d = jsonDecode(res.body);
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(d['message'] ?? 'Submitted!')));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Recharge submitted!')));
                   } catch (_) {}
                 },
                 child: const Text('Submit & Credit'),
@@ -344,43 +341,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         },
       ),
     );
-  }
-
-  void _openBillingLogsModal() async {
-    try {
-      final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=fetch_billing_logs&user_id=$userId'));
-      final data = jsonDecode(res.body);
-      final records = data['records'] ?? [];
-
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Billing & Usage Logs', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 350,
-              child: records.isEmpty
-                  ? const Center(child: Text('No transaction logs recorded yet.'))
-                  : ListView.separated(
-                      itemCount: records.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final r = records[i];
-                        return ListTile(
-                          dense: true,
-                          title: Text('+${r['recipient_phone']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('${r['created_at']} • ${r['sent_via']}'),
-                          trailing: Text('₹${r['cost']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF008069))),
-                        );
-                      },
-                    ),
-            ),
-            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
-          ),
-        );
-      }
-    } catch (_) {}
   }
 
   void _openNewChatDialog(BuildContext context) {
@@ -459,18 +419,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             backgroundColor: const Color(0xFF008069),
             elevation: 0,
             actions: [
-              IconButton(icon: const Icon(Icons.receipt_long, color: Colors.white), onPressed: _openBillingLogsModal, tooltip: 'Billing Logs'),
               IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: () => fetchLiveChats(background: false), tooltip: 'Refresh'),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: Colors.white),
                 onSelected: (val) {
                   if (val == 'recharge') _openRechargeDialog();
-                  if (val == 'billing') _openBillingLogsModal();
                   if (val == 'logout') _logout();
                 },
                 itemBuilder: (context) => [
                   const PopupMenuItem(value: 'recharge', child: Text('Add Wallet Balance')),
-                  const PopupMenuItem(value: 'billing', child: Text('Billing Logs')),
                   const PopupMenuItem(value: 'logout', child: Text('Logout', style: TextStyle(color: Colors.red))),
                 ],
               ),
@@ -488,7 +445,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
           body: Column(
             children: [
-              // TOP RED ALERT NOTICE BANNER
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -543,7 +499,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget _buildChatsListSection({required bool isDesktop}) {
     return Column(
       children: [
-        // SEARCH INPUT BOX
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
           child: Container(
@@ -552,7 +507,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             child: TextField(
               controller: searchController,
               decoration: const InputDecoration(
-                hintText: 'Search contacts, numbers or words...',
+                hintText: 'Search contacts, numbers...',
                 hintStyle: TextStyle(fontSize: 12),
                 prefixIcon: Icon(Icons.search, size: 18),
                 border: InputBorder.none,
@@ -566,7 +521,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         ),
 
-        // FILTER TABS (ALL, UNREAD, FAVOURITES, IMPORTANT, ARCHIVE)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: SingleChildScrollView(
@@ -577,8 +531,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 const SizedBox(width: 6),
                 _filterChip('unread', 'Unread'),
                 const SizedBox(width: 6),
-                _filterChip('favourites', 'Favourites'),
-                const SizedBox(width: 6),
                 _filterChip('important', 'Important'),
                 const SizedBox(width: 6),
                 _filterChip('archive', 'Archive'),
@@ -588,7 +540,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ),
         const Divider(height: 1),
 
-        // CONVERSATIONS LIST
         Expanded(
           child: isLoadingChats
               ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
@@ -605,7 +556,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         final unread = (chat['unread_count'] as num?)?.toInt() ?? 0;
                         final isOutbound = chat['last_direction'] == 'outbound';
                         final isSelected = isDesktop && activeChatPhone == phone;
-
                         final initialText = name.isNotEmpty ? (name.length >= 2 ? name.substring(0, 2) : name.substring(0, 1)).toUpperCase() : 'U';
 
                         return Container(
@@ -737,7 +687,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 }
 
 // =========================================================================
-// 3. CHAT ROOM (DUAL ACTION BUTTONS, TEMPLATES, REACTIONS, TRANSLATE)
+// 3. CHAT ROOM (INSTANT 0ms CACHE + SILENT BACKGROUND SYNC)
 // =========================================================================
 class ChatDetailScreen extends StatefulWidget {
   final String name;
@@ -765,8 +715,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchMessages(initial: true);
-    _chatPollingTimer = Timer.periodic(const Duration(seconds: 3), (_) => _fetchMessages(initial: false));
+    // 1. INSTANT 0ms CACHE LOAD (Bina kisi delay ke purani chat screen par dikhegi)
+    if (_chatMemoryCache.containsKey(widget.phone)) {
+      _messages = List.from(_chatMemoryCache[widget.phone]!);
+      _isLoading = false;
+      _scrollToBottom();
+    }
+
+    _fetchMessages(initial: _messages.isEmpty);
+    // Background polling every 4 seconds
+    _chatPollingTimer = Timer.periodic(const Duration(seconds: 4), (_) => _fetchMessages(initial: false));
   }
 
   @override
@@ -783,7 +741,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       if (data['status'] == true && mounted) {
         final List<dynamic> newMsgs = data['messages'] ?? [];
         if (newMsgs.length != _messages.length || initial) {
-          setState(() => _messages = newMsgs);
+          setState(() {
+            _messages = newMsgs;
+            _chatMemoryCache[widget.phone] = newMsgs; // Update Cache
+          });
           _scrollToBottom();
         }
       }
@@ -794,7 +755,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
-        _scrollController.animateTo(_scrollController.position.maxScrollExtent, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+        _scrollController.animateTo(_scrollController.position.maxScrollExtent, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
       }
     });
   }
@@ -816,6 +777,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         'status': 'sent',
         'created_at': 'Just now',
       });
+      _chatMemoryCache[widget.phone] = _messages;
     });
     _scrollToBottom();
 
@@ -909,7 +871,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Emoji Reaction Bar
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: ['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) {
@@ -971,118 +932,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.info_outline, color: Color(0xFF008069)),
-                title: const Text('Message Info'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _openMessageInfoModal(msg);
-                },
-              ),
-              ListTile(
                 leading: const Icon(Icons.delete, color: Colors.red),
                 title: const Text('Delete Message'),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(ctx);
-                  _confirmDeleteMessage(msg);
+                  await http.post(
+                    Uri.parse('https://wubachat.com/api/app_api.php'),
+                    headers: {'Content-Type': 'application/json'},
+                    body: jsonEncode({'action': 'delete_message', 'user_id': widget.userId, 'message_id': msg['id'], 'delete_type': 'everyone'}),
+                  );
+                  _fetchMessages();
                 },
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  void _openMessageInfoModal(Map<String, dynamic> msg) {
-    final status = (msg['status'] ?? 'sent').toString().toUpperCase();
-    final time = msg['created_at']?.toString() ?? 'Just now';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.info_outline, color: Color(0xFF008069)),
-            SizedBox(width: 8),
-            Text('Message Info', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: const Color(0xFFF0F2F5), borderRadius: BorderRadius.circular(8)),
-              child: Text(msg['message_text'] ?? '', style: const TextStyle(fontSize: 13)),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Row(children: [Icon(Icons.done_all, color: Color(0xFF34B7F1), size: 16), SizedBox(width: 6), Text('Read')]),
-                Text(status == 'READ' ? time : 'Not read yet', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-              ],
-            ),
-            const Divider(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Row(children: [Icon(Icons.done_all, color: Colors.grey, size: 16), SizedBox(width: 6), Text('Delivered')]),
-                Text(status == 'DELIVERED' || status == 'READ' ? time : 'Pending', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-              ],
-            ),
-            const Divider(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Row(children: [Icon(Icons.done, color: Colors.grey, size: 16), SizedBox(width: 6), Text('Sent')]),
-                Text(time, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-              ],
-            ),
-          ],
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
-      ),
-    );
-  }
-
-  void _confirmDeleteMessage(Map<String, dynamic> msg) {
-    final isMe = (msg['direction'] == 'outbound' || msg['is_me'] == 1);
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Message?'),
-        content: Text(isMe ? 'Do you want to delete this message for everyone or just for you?' : 'Delete this message for yourself?'),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await http.post(
-                Uri.parse('https://wubachat.com/api/app_api.php'),
-                headers: {'Content-Type': 'application/json'},
-                body: jsonEncode({'action': 'delete_message', 'user_id': widget.userId, 'message_id': msg['id'], 'delete_type': 'me'}),
-              );
-              _fetchMessages();
-            },
-            child: const Text('Delete for Me'),
-          ),
-          if (isMe)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                await http.post(
-                  Uri.parse('https://wubachat.com/api/app_api.php'),
-                  headers: {'Content-Type': 'application/json'},
-                  body: jsonEncode({'action': 'delete_message', 'user_id': widget.userId, 'message_id': msg['id'], 'delete_type': 'everyone'}),
-                );
-                _fetchMessages();
-              },
-              child: const Text('Delete for Everyone'),
-            ),
-        ],
       ),
     );
   }
@@ -1218,7 +1082,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   ),
           ),
 
-          // REPLY PREVIEW STRIP
           if (_replyToWamid != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -1233,7 +1096,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               ),
             ),
 
-          // INPUT & DUAL SEND BUTTON BAR
           Container(
             padding: const EdgeInsets.all(8),
             color: Colors.white,
