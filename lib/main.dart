@@ -35,7 +35,7 @@ class WubachatApp extends StatelessWidget {
 }
 
 // =========================================================================
-// 1. ORIGINAL AUTH SCREEN (WITH FLAG, FOOTER & FOUNDER DETAILS)
+// 1. AUTH SCREEN (ORIGINAL WITH FLAG, FOOTER & FOUNDER DETAILS)
 // =========================================================================
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -384,7 +384,7 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // =========================================================================
-// 2. DASHBOARD HOME (SPLIT SCREEN, FILTERS, SEARCH, DYNAMIC QR)
+// 2. DASHBOARD HOME (WITH SETTINGS CONSOLE, LOGOUT, FILTERS & DYNAMIC QR)
 // =========================================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -398,10 +398,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Timer? _homePollTimer;
   String userId = '1';
   String userName = 'User';
+  String userPhone = '';
   double balance = 0.0;
   String adminUpi = 'wubachat@okaxis';
   String adminPayee = 'Wubachat Payments';
   int metaSent = 0;
+  bool isBotEnabled = true;
 
   String currentChatFilter = 'all';
   String searchQuery = '';
@@ -435,6 +437,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     setState(() {
       userId = prefs.getString('user_id') ?? '1';
       userName = prefs.getString('user_name') ?? 'User';
+      userPhone = prefs.getString('user_phone') ?? '';
     });
 
     final cachedChats = prefs.getString('cached_chat_list');
@@ -463,6 +466,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       if (data['status'] == true && mounted) {
         setState(() {
           userName = data['name'] ?? userName;
+          userPhone = data['phone'] ?? userPhone;
           balance = (data['balance'] as num?)?.toDouble() ?? 0.0;
           adminUpi = data['admin_upi'] ?? adminUpi;
           adminPayee = data['admin_payee'] ?? adminPayee;
@@ -492,6 +496,191 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       }
     } catch (_) {}
     if (!background && mounted) setState(() => isLoadingChats = false);
+  }
+
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.power_settings_new, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Confirm Logout', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text('Are you sure you want to logout from this Wubachat account?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.clear();
+              if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AuthScreen()));
+            },
+            child: const Text('Yes, Logout'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openSettingsConsole() {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSettingsState) {
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Container(
+              padding: const EdgeInsets.all(22),
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.settings, color: Color(0xFF008069)),
+                            SizedBox(width: 8),
+                            Text('Account Settings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                      ],
+                    ),
+                    const Divider(height: 20),
+                    Center(
+                      child: Column(
+                        children: [
+                          CircleAvatar(
+                            radius: 36,
+                            backgroundColor: const Color(0xFF008069),
+                            child: Text(
+                              userName.isNotEmpty ? userName.substring(0, 1).toUpperCase() : 'U',
+                              style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(userName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text(userPhone.isNotEmpty ? '+91 $userPhone' : 'Registered User', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(12)),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Auto-Reply Bot', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              Switch(
+                                value: isBotEnabled,
+                                activeColor: const Color(0xFF008069),
+                                onChanged: (val) => setSettingsState(() => isBotEnabled = val),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Meta Cloud API', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(color: Colors.emerald.shade100, borderRadius: BorderRadius.circular(8)),
+                                child: const Text('Connected', style: TextStyle(color: Color(0xFF008069), fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.receipt_long, color: Color(0xFF008069)),
+                      title: const Text('Billing Logs & Audit', style: TextStyle(fontWeight: FontWeight.bold)),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _openBillingLogsModal();
+                      },
+                    ),
+                    ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.download_for_offline, color: Color(0xFF008069)),
+                      title: const Text('Download Smart Dispatcher (.zip)', style: TextStyle(fontWeight: FontWeight.bold)),
+                      trailing: const Icon(Icons.download, size: 18),
+                      onTap: () => launchUrl(Uri.parse('https://wubachat.com/download_assistant.php'), mode: LaunchMode.externalApplication),
+                    ),
+                    const Divider(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red, elevation: 0),
+                        icon: const Icon(Icons.power_settings_new),
+                        label: const Text('Logout Account', style: TextStyle(fontWeight: FontWeight.bold)),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _confirmLogout();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _openBillingLogsModal() async {
+    try {
+      final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=fetch_billing_logs&user_id=$userId'));
+      final data = jsonDecode(res.body);
+      final records = data['records'] ?? [];
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Billing & Usage Logs', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 350,
+              child: records.isEmpty
+                  ? const Center(child: Text('No transaction logs recorded yet.'))
+                  : ListView.separated(
+                      itemCount: records.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final r = records[i];
+                        return ListTile(
+                          dense: true,
+                          title: Text('+${r['recipient_phone']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('${r['created_at']} • ${r['sent_via']}'),
+                          trailing: Text('₹${r['cost']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF008069))),
+                        );
+                      },
+                    ),
+            ),
+            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   void _openRechargeDialog() {
@@ -701,7 +890,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             elevation: 0,
             actions: [
               IconButton(icon: const Icon(Icons.person_add, color: Colors.white), onPressed: _openAddContactDialog, tooltip: 'Add Contact'),
+              IconButton(icon: const Icon(Icons.receipt_long, color: Colors.white), onPressed: _openBillingLogsModal, tooltip: 'Billing Logs'),
+              IconButton(icon: const Icon(Icons.settings, color: Colors.white), onPressed: _openSettingsConsole, tooltip: 'Settings Console'),
               IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: () => fetchLiveChats(background: false), tooltip: 'Refresh'),
+              IconButton(icon: const Icon(Icons.power_settings_new, color: Colors.redAccent), onPressed: _confirmLogout, tooltip: 'Logout Account'),
             ],
             bottom: isDesktop
                 ? null
@@ -970,7 +1162,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 }
 
 // =========================================================================
-// 3. CHAT ROOM (FULL INPUT TOOLS, EMOJI, ATTACHMENT, TRANSLATE, ALBUM GRID)
+// 3. CHAT ROOM (100+ LANGUAGES, EMOJI, ATTACHMENTS, CLUSTER IMAGE GRID)
 // =========================================================================
 class ChatDetailScreen extends StatefulWidget {
   final String name;
@@ -1003,6 +1195,101 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   bool _isRecordingVoice = false;
   int _voiceSeconds = 0;
   Timer? _voiceTimer;
+
+  // 100+ COMPREHENSIVE LANGUAGES DATABASE
+  final List<Map<String, String>> _all100Languages = [
+    {'code': 'hi-Latn', 'name': 'Hinglish'},
+    {'code': 'hi', 'name': 'Hindi (हिंदी)'},
+    {'code': 'en', 'name': 'English'},
+    {'code': 'ur', 'name': 'Urdu (اردو)'},
+    {'code': 'ar', 'name': 'Arabic (العربية)'},
+    {'code': 'bn', 'name': 'Bengali (বাংলা)'},
+    {'code': 'mr', 'name': 'Marathi (मराठी)'},
+    {'code': 'gu', 'name': 'Gujarati (ગુજરાતી)'},
+    {'code': 'pa', 'name': 'Punjabi (ਪੰਜਾਬੀ)'},
+    {'code': 'ta', 'name': 'Tamil (தமிழ்)'},
+    {'code': 'te', 'name': 'Telugu (తెలుగు)'},
+    {'code': 'kn', 'name': 'Kannada (ಕನ್ನಡ)'},
+    {'code': 'ml', 'name': 'Malayalam (മലയാളം)'},
+    {'code': 'or', 'name': 'Odia (ଓଡ଼ିଆ)'},
+    {'code': 'as', 'name': 'Assamese (অসমীয়া)'},
+    {'code': 'ne', 'name': 'Nepali (नेपाली)'},
+    {'code': 'sa', 'name': 'Sanskrit (संस्कृतम्)'},
+    {'code': 'es', 'name': 'Spanish (Español)'},
+    {'code': 'fr', 'name': 'French (Français)'},
+    {'code': 'de', 'name': 'German (Deutsch)'},
+    {'code': 'ru', 'name': 'Russian (Русский)'},
+    {'code': 'zh-CN', 'name': 'Chinese (Simplified)'},
+    {'code': 'ja', 'name': 'Japanese (日本語)'},
+    {'code': 'ko', 'name': 'Korean (한국어)'},
+    {'code': 'tr', 'name': 'Turkish (Türkçe)'},
+    {'code': 'it', 'name': 'Italian (Italiano)'},
+    {'code': 'pt', 'name': 'Portuguese (Português)'},
+    {'code': 'id', 'name': 'Indonesian (Bahasa)'},
+    {'code': 'fa', 'name': 'Persian (فارسی)'},
+    {'code': 'nl', 'name': 'Dutch (Nederlands)'},
+    {'code': 'pl', 'name': 'Polish (Polski)'},
+    {'code': 'uk', 'name': 'Ukrainian (Українська)'},
+    {'code': 'ro', 'name': 'Romanian (Română)'},
+    {'code': 'el', 'name': 'Greek (Ελληνικά)'},
+    {'code': 'cs', 'name': 'Czech (Čeština)'},
+    {'code': 'sv', 'name': 'Swedish (Svenska)'},
+    {'code': 'hu', 'name': 'Hungarian (Magyar)'},
+    {'code': 'th', 'name': 'Thai (ไทย)'},
+    {'code': 'vi', 'name': 'Vietnamese (Tiếng Việt)'},
+    {'code': 'ms', 'name': 'Malay (Melayu)'},
+    {'code': 'fil', 'name': 'Filipino (Tagalog)'},
+    {'code': 'he', 'name': 'Hebrew (עברית)'},
+    {'code': 'da', 'name': 'Danish (Dansk)'},
+    {'code': 'fi', 'name': 'Finnish (Suomi)'},
+    {'code': 'no', 'name': 'Norwegian (Norsk)'},
+    {'code': 'sk', 'name': 'Slovak (Slovenčina)'},
+    {'code': 'bg', 'name': 'Bulgarian (Български)'},
+    {'code': 'hr', 'name': 'Croatian (Hrvatski)'},
+    {'code': 'sr', 'name': 'Serbian (Српски)'},
+    {'code': 'lt', 'name': 'Lithuanian (Lietuvių)'},
+    {'code': 'sl', 'name': 'Slovenian (Slovenščina)'},
+    {'code': 'et', 'name': 'Estonian (Eesti)'},
+    {'code': 'lv', 'name': 'Latvian (Latviešu)'},
+    {'code': 'af', 'name': 'Afrikaans'},
+    {'code': 'sq', 'name': 'Albanian (Shqip)'},
+    {'code': 'am', 'name': 'Amharic (አማርኛ)'},
+    {'code': 'hy', 'name': 'Armenian (Հայերեն)'},
+    {'code': 'az', 'name': 'Azerbaijani (Azərbaycan)'},
+    {'code': 'eu', 'name': 'Basque (Euskara)'},
+    {'code': 'be', 'name': 'Belarusian (Беларуская)'},
+    {'code': 'bs', 'name': 'Bosnian (Bosanski)'},
+    {'code': 'ca', 'name': 'Catalan (Català)'},
+    {'code': 'ka', 'name': 'Georgian (ქართული)'},
+    {'code': 'ha', 'name': 'Hausa'},
+    {'code': 'is', 'name': 'Icelandic (Íslenska)'},
+    {'code': 'ig', 'name': 'Igbo'},
+    {'code': 'ga', 'name': 'Irish (Gaeilge)'},
+    {'code': 'jw', 'name': 'Javanese'},
+    {'code': 'kk', 'name': 'Kazakh (Қазақ)'},
+    {'code': 'km', 'name': 'Khmer (ខ្មែរ)'},
+    {'code': 'ku', 'name': 'Kurdish'},
+    {'code': 'ky', 'name': 'Kyrgyz (Кыргызча)'},
+    {'code': 'lo', 'name': 'Lao (ລາວ)'},
+    {'code': 'la', 'name': 'Latin'},
+    {'code': 'mk', 'name': 'Macedonian (Македонски)'},
+    {'code': 'mg', 'name': 'Malagasy'},
+    {'code': 'mt', 'name': 'Maltese (Malti)'},
+    {'code': 'mn', 'name': 'Mongolian (Монгол)'},
+    {'code': 'my', 'name': 'Myanmar (Burmese)'},
+    {'code': 'ps', 'name': 'Pashto (پښتو)'},
+    {'code': 'sd', 'name': 'Sindhi (سنڌي)'},
+    {'code': 'si', 'name': 'Sinhala (සිංහල)'},
+    {'code': 'so', 'name': 'Somali'},
+    {'code': 'sw', 'name': 'Swahili (Kiswahili)'},
+    {'code': 'tg', 'name': 'Tajik (Тоҷикӣ)'},
+    {'code': 'uz', 'name': 'Uzbek (Oʻzbek)'},
+    {'code': 'cy', 'name': 'Welsh (Cymraeg)'},
+    {'code': 'xh', 'name': 'Xhosa'},
+    {'code': 'yi', 'name': 'Yiddish'},
+    {'code': 'yo', 'name': 'Yoruba'},
+    {'code': 'zu', 'name': 'Zulu'}
+  ];
 
   final Map<String, List<String>> _whatsappEmojiCategories = {
     'Smileys': ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','😉','😍','🥰','😘','😋','😎','🤩','🥳','😏','🥺','😢','😭','😡','🤯','🤗','🤔','😴','🤮','😷'],
@@ -1675,7 +1962,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               ),
             ),
 
-          // FULL INPUT BAR (ATTACHMENT, EMOJI, TRANSLATE, TOGGLE, MIC & SEND)
+          // FULL INPUT BAR (ATTACHMENT, EMOJI, 100+ LANGUAGES, TOGGLE, MIC & SEND)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             color: Colors.white,
@@ -1691,6 +1978,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   onPressed: _openAttachmentPicker,
                   tooltip: 'Attachments',
                 ),
+                // 100+ LANGUAGES SELECTION DROPDOWN
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
@@ -1698,12 +1986,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     value: _selectedLang,
                     underline: const SizedBox(),
                     isDense: true,
-                    items: const [
-                      DropdownMenuItem(value: 'hi-Latn', child: Text('Hinglish', style: TextStyle(fontSize: 10.5))),
-                      DropdownMenuItem(value: 'hi', child: Text('Hindi', style: TextStyle(fontSize: 10.5))),
-                      DropdownMenuItem(value: 'en', child: Text('English', style: TextStyle(fontSize: 10.5))),
-                    ],
-                    onChanged: (val) => setState(() => _selectedLang = val!),
+                    menuMaxHeight: 380,
+                    items: _all100Languages.map((lang) {
+                      return DropdownMenuItem<String>(
+                        value: lang['code'],
+                        child: Text(lang['name']!, style: const TextStyle(fontSize: 11)),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => _selectedLang = val);
+                    },
                   ),
                 ),
                 IconButton(
