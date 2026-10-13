@@ -5,9 +5,6 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// 0ms In-Memory Cache
-final Map<String, List<dynamic>> _chatMemoryCache = {};
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
@@ -63,7 +60,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final name = nameController.text.trim();
 
     if (phone.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all required fields')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
       return;
     }
 
@@ -89,10 +86,10 @@ class _AuthScreenState extends State<AuthScreen> {
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomeScreen()));
         }
       } else {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? 'Authentication failed')));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data['message'] ?? 'Auth failed')));
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Connection error: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -140,7 +137,7 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
               const SizedBox(height: 20),
               if (!isLogin) ...[
-                TextField(controller: nameController, decoration: const InputDecoration(hintText: 'Full / Business Name', border: OutlineInputBorder())),
+                TextField(controller: nameController, decoration: const InputDecoration(hintText: 'Full Name', border: OutlineInputBorder())),
                 const SizedBox(height: 12),
               ],
               TextField(controller: phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(hintText: 'Mobile Number', prefixText: '+91 ', border: OutlineInputBorder())),
@@ -173,7 +170,7 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // =========================================================================
-// 2. DASHBOARD HOME (SPLIT SCREEN, FILTERS, SEARCH, DYNAMIC QR)
+// 2. DASHBOARD HOME (SPLIT DESKTOP VIEW, PERSISTENT CACHE, CONTACT ACTIONS)
 // =========================================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -225,8 +222,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       userId = prefs.getString('user_id') ?? '1';
       userName = prefs.getString('user_name') ?? 'User';
     });
+
+    // 0ms Persistent Cache load for chat list
+    final cachedChats = prefs.getString('cached_chat_list');
+    if (cachedChats != null) {
+      try {
+        final decoded = jsonDecode(cachedChats) as List<dynamic>;
+        setState(() {
+          chatList = decoded;
+          isLoadingChats = false;
+          if (decoded.isNotEmpty) {
+            activeChatPhone = decoded[0]['phone_number'];
+            activeChatName = decoded[0]['contact_name'];
+          }
+        });
+      } catch (_) {}
+    }
+
     fetchLiveWallet();
-    fetchLiveChats(background: false);
+    fetchLiveChats(background: chatList.isNotEmpty);
   }
 
   Future<void> fetchLiveWallet() async {
@@ -252,23 +266,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       final res = await http.get(Uri.parse(url));
       final data = jsonDecode(res.body);
       if (data['status'] == true && mounted) {
+        final List<dynamic> fetched = data['chats'] ?? [];
         setState(() {
-          chatList = data['chats'] ?? [];
-          if (activeChatPhone == null && chatList.isNotEmpty) {
-            activeChatPhone = chatList[0]['phone_number'];
-            activeChatName = chatList[0]['contact_name'];
+          chatList = fetched;
+          if (activeChatPhone == null && fetched.isNotEmpty) {
+            activeChatPhone = fetched[0]['phone_number'];
+            activeChatName = fetched[0]['contact_name'];
           }
         });
+        // Save to SharedPreferences for permanent auto-sync
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('cached_chat_list', jsonEncode(fetched));
       }
     } catch (_) {}
     if (!background && mounted) setState(() => isLoadingChats = false);
-  }
-
-  Future<void> _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    _chatMemoryCache.clear();
-    if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AuthScreen()));
   }
 
   void _openRechargeDialog() {
@@ -342,45 +353,104 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  void _openNewChatDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    final phoneController = TextEditingController();
+  void _openAddContactDialog() {
+    final nameCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Start New Conversation'),
+        title: const Text('Add New Contact', style: TextStyle(fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Contact Name (Optional)')),
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder())),
             const SizedBox(height: 10),
-            TextField(controller: phoneController, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: '10-digit mobile number', prefixText: '+91 ')),
+            TextField(controller: phoneCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Mobile Number', prefixText: '+91 ', border: OutlineInputBorder())),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A884), foregroundColor: Colors.white),
-            onPressed: () {
-              final num = phoneController.text.trim();
-              final cName = nameController.text.trim();
-              if (num.isNotEmpty) {
-                Navigator.pop(ctx);
-                final displayName = cName.isNotEmpty ? cName : '+91 $num';
-                if (MediaQuery.of(context).size.width > 750) {
-                  setState(() {
-                    activeChatPhone = '91$num';
-                    activeChatName = displayName;
-                  });
-                } else {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => ChatDetailScreen(name: displayName, phone: '91$num', userId: userId, isEmbedded: false)),
-                  );
-                }
-              }
+            onPressed: () async {
+              final n = nameCtrl.text.trim();
+              final p = phoneCtrl.text.trim();
+              if (p.isEmpty) return;
+              Navigator.pop(ctx);
+              await http.post(
+                Uri.parse('https://wubachat.com/api/app_api.php'),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({'action': 'save_contact', 'user_id': userId, 'name': n, 'phone': p}),
+              );
+              fetchLiveChats(background: false);
             },
-            child: const Text('Chat'),
+            child: const Text('Save Contact'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openEditContactDialog(Map<String, dynamic> chat) {
+    final nameCtrl = TextEditingController(text: chat['contact_name']);
+    final phoneCtrl = TextEditingController(text: chat['phone_number']);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Contact Details', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Contact Name', border: OutlineInputBorder())),
+            const SizedBox(height: 10),
+            TextField(controller: phoneCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Mobile Number', border: OutlineInputBorder())),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A884), foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await http.post(
+                Uri.parse('https://wubachat.com/api/app_api.php'),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({'action': 'edit_contact', 'user_id': userId, 'id': chat['id'], 'name': nameCtrl.text.trim(), 'phone': phoneCtrl.text.trim()}),
+              );
+              fetchLiveChats(background: false);
+            },
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteConversation(String phone) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Conversation?'),
+        content: const Text('Are you sure you want to permanently delete this chat history?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await http.post(
+                Uri.parse('https://wubachat.com/api/app_api.php'),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({'action': 'delete_conversation', 'user_id': userId, 'phone': phone}),
+              );
+              final prefs = await SharedPreferences.getInstance();
+              final last10 = phone.length >= 10 ? phone.substring(phone.length - 10) : phone;
+              await prefs.remove('wuba_chat_$last10');
+              fetchLiveChats(background: false);
+            },
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -418,18 +488,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             backgroundColor: const Color(0xFF008069),
             elevation: 0,
             actions: [
+              IconButton(icon: const Icon(Icons.person_add, color: Colors.white), onPressed: _openAddContactDialog, tooltip: 'Add Contact'),
               IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: () => fetchLiveChats(background: false), tooltip: 'Refresh'),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: Colors.white),
-                onSelected: (val) {
-                  if (val == 'recharge') _openRechargeDialog();
-                  if (val == 'logout') _logout();
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'recharge', child: Text('Add Wallet Balance')),
-                  const PopupMenuItem(value: 'logout', child: Text('Logout', style: TextStyle(color: Colors.red))),
-                ],
-              ),
             ],
             bottom: isDesktop
                 ? null
@@ -482,13 +542,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
             ],
           ),
-          floatingActionButton: isDesktop
-              ? null
-              : FloatingActionButton(
-                  backgroundColor: const Color(0xFF00A884),
-                  child: const Icon(Icons.chat, color: Colors.white),
-                  onPressed: () => _openNewChatDialog(context),
-                ),
         );
       },
     );
@@ -576,16 +629,38 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               children: [
                                 if (isOutbound) const Icon(Icons.done_all, size: 13, color: Color(0xFF34B7F1)),
                                 if (isOutbound) const SizedBox(width: 3),
-                                Expanded(child: Text(lastMsg, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey.shade600, fontSize: 12.5))),
+                                Expanded(
+                                  child: Text(
+                                    lastMsg.startsWith('[Image]:') ? '📷 Photo' : (lastMsg.startsWith('[Document]:') ? '📄 Document' : lastMsg),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12.5),
+                                  ),
+                                ),
                               ],
                             ),
-                            trailing: unread > 0
-                                ? Container(
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (unread > 0)
+                                  Container(
                                     padding: const EdgeInsets.all(5),
                                     decoration: const BoxDecoration(color: Color(0xFF25D366), shape: BoxShape.circle),
                                     child: Text('$unread', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                  )
-                                : null,
+                                  ),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, size: 18, color: Colors.grey),
+                                  onSelected: (val) {
+                                    if (val == 'edit') _openEditContactDialog(chat);
+                                    if (val == 'delete') _confirmDeleteConversation(phone);
+                                  },
+                                  itemBuilder: (ctx) => [
+                                    const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 16), SizedBox(width: 8), Text('Edit Contact')])),
+                                    const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, color: Colors.red, size: 16), SizedBox(width: 8), Text('Delete Conversation', style: TextStyle(color: Colors.red))])),
+                                  ],
+                                ),
+                              ],
+                            ),
                             onTap: () {
                               if (isDesktop) {
                                 setState(() {
@@ -683,7 +758,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 }
 
 // =========================================================================
-// 3. CHAT ROOM (SWIPE-TO-REPLY, LONG-PRESS ACTIONS, CALLING, VOICE NOTES)
+// 3. CHAT ROOM (PARSED MEDIA, COMPACT TOGGLE, MULTI-SELECT, SWIPE-REPLY)
 // =========================================================================
 class ChatDetailScreen extends StatefulWidget {
   final String name;
@@ -704,60 +779,69 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   List<dynamic> _messages = [];
   bool _isLoading = true;
 
+  // Selected Channel: 'whatsapp' or 'wubachat'
+  String _selectedChannel = 'whatsapp';
+
+  // Multi-Select Mode States
+  bool _isSelectMode = false;
+  final Set<int> _selectedMessageIds = {};
+
   String? _replyToWamid;
   String? _replyToText;
-  String _selectedLang = 'hi-Latn';
-
-  // Voice note recording states
-  bool _isRecordingVoice = false;
-  int _voiceSeconds = 0;
-  Timer? _voiceTimer;
-
-  // Complete WhatsApp Emoji Categories
-  final Map<String, List<String>> _whatsappEmojiCategories = {
-    'Smileys': ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','😉','😍','🥰','😘','😋','😎','🤩','🥳','😏','🥺','😢','😭','😡','🤯','🤗','🤔','😴','🤮','😷'],
-    'Gestures': ['👍','👎','👏','🙌','👐','🤲','🤝','🙏','✍️','💪','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','👇','✋','👌','🤌','🤏','👋','👊','✊','🤛','🤜'],
-    'Love': ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','🔥','✨','🎉','💯','🌹','🌸','💐'],
-    'Food': ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍔','🍟','🍕','🌮','🍜','🍣','🎂','🍰','🍫','☕','🧃','🥤'],
-    'Objects': ['💻','📱','☎️','📷','🎥','🎧','🎤','💡','💸','💵','💳','📦','✉️','📑','📊','📈','🔑','🔒','🔨','⚙️','🛡️','🚗','🚕','✈️','🚀','🏠','🏥']
-  };
 
   @override
   void initState() {
     super.initState();
-    if (_chatMemoryCache.containsKey(widget.phone)) {
-      _messages = List.from(_chatMemoryCache[widget.phone]!);
-      _isLoading = false;
-      _scrollToBottom();
-    }
-    _fetchMessages(initial: _messages.isEmpty);
-    _chatPollingTimer = Timer.periodic(const Duration(seconds: 4), (_) => _fetchMessages(initial: false));
+    _loadStoredChatAndFetch();
+    _chatPollingTimer = Timer.periodic(const Duration(seconds: 4), (_) => _fetchMessages(silent: true));
   }
 
   @override
   void dispose() {
     _chatPollingTimer?.cancel();
-    _voiceTimer?.cancel();
     _scrollController.dispose();
+    _msgController.dispose();
     super.dispose();
   }
 
-  Future<void> _fetchMessages({bool initial = false}) async {
+  Future<void> _loadStoredChatAndFetch() async {
+    final prefs = await SharedPreferences.getInstance();
+    final last10 = widget.phone.length >= 10 ? widget.phone.substring(widget.phone.length - 10) : widget.phone;
+    final cached = prefs.getString('wuba_chat_$last10');
+
+    if (cached != null) {
+      try {
+        final decoded = jsonDecode(cached) as List<dynamic>;
+        setState(() {
+          _messages = decoded;
+          _isLoading = false;
+        });
+        _scrollToBottom();
+      } catch (_) {}
+    }
+
+    _fetchMessages(silent: _messages.isNotEmpty);
+  }
+
+  Future<void> _fetchMessages({bool silent = false}) async {
     try {
       final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=get_messages&user_id=${widget.userId}&phone=${widget.phone}'));
       final data = jsonDecode(res.body);
       if (data['status'] == true && mounted) {
         final List<dynamic> newMsgs = data['messages'] ?? [];
-        if (newMsgs.length != _messages.length || initial) {
+        if (newMsgs.length != _messages.length || !silent) {
           setState(() {
             _messages = newMsgs;
-            _chatMemoryCache[widget.phone] = newMsgs;
           });
           _scrollToBottom();
         }
+        // Save to Phone Persistent Storage
+        final prefs = await SharedPreferences.getInstance();
+        final last10 = widget.phone.length >= 10 ? widget.phone.substring(widget.phone.length - 10) : widget.phone;
+        await prefs.setString('wuba_chat_$last10', jsonEncode(newMsgs));
       }
     } catch (_) {}
-    if (initial && mounted) setState(() => _isLoading = false);
+    if (!silent && mounted) setState(() => _isLoading = false);
   }
 
   void _scrollToBottom() {
@@ -768,27 +852,71 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     });
   }
 
-  Future<void> _sendMessage(String channel, {String? mediaType, String? mediaUrl, String? customText}) async {
-    final text = customText ?? _msgController.text.trim();
-    if (text.isEmpty && mediaUrl == null) return;
+  // --- VALIDATED SEND DECISION ENGINE ---
+  Future<void> _handleSendDecision() async {
+    final text = _msgController.text.trim();
+    if (text.isEmpty) return;
 
+    if (_selectedChannel == 'whatsapp') {
+      // 1. Fetch user balance & Meta status
+      final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=get_wallet&user_id=${widget.userId}'));
+      final d = jsonDecode(res.body);
+      final bal = (d['balance'] as num?)?.toDouble() ?? 0.0;
+
+      if (bal < 0.50) {
+        _showEnglishPopup(
+          title: 'Insufficient Balance',
+          message: 'Your wallet balance is low (Required: ₹0.50 per template outside 24h window). Please add balance to dispatch official WhatsApp messages.',
+        );
+        return;
+      }
+    } else {
+      // 2. Wubachat User Check
+      final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=check_wubachat_user&phone=${widget.phone}'));
+      final d = jsonDecode(res.body);
+      if (d['is_wubachat_user'] != true) {
+        _showEnglishPopup(
+          title: 'Recipient Not on Wubachat',
+          message: 'This mobile number is not registered on Wubachat. Please switch toggle to "WhatsApp" or invite them to Wubachat.',
+        );
+        return;
+      }
+    }
+
+    _executeSendMessage(text);
+  }
+
+  void _showEnglishPopup({required String title, required String message}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text(message, style: const TextStyle(fontSize: 13, height: 1.4)),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A884), foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _executeSendMessage(String text) async {
     final sendingWamid = _replyToWamid;
-    if (customText == null) _msgController.clear();
-
+    _msgController.clear();
     setState(() {
       _replyToWamid = null;
       _replyToText = null;
       _messages.add({
-        'id': 0,
+        'id': DateTime.now().millisecondsSinceEpoch,
         'message_text': text,
         'direction': 'outbound',
         'is_me': 1,
-        'media_type': mediaType ?? 'text',
-        'media_url': mediaUrl ?? '',
         'status': 'sent',
         'created_at': 'Just now',
       });
-      _chatMemoryCache[widget.phone] = _messages;
     });
     _scrollToBottom();
 
@@ -801,345 +929,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           'user_id': widget.userId,
           'recipient': widget.phone,
           'message': text,
-          'sent_via': channel,
-          'media_type': mediaType ?? 'text',
-          'media_url': mediaUrl ?? '',
+          'sent_via': _selectedChannel,
           'reply_to_wamid': sendingWamid ?? ''
         }),
       );
-      _fetchMessages();
+      _fetchMessages(silent: true);
     } catch (_) {}
   }
 
-  // --- AUDIO & VIDEO CALLING SCREEN MODAL (WUBACHAT TO WUBACHAT) ---
-  void _openCallModal(String callType) {
-    bool isMuted = false;
-    bool isSpeakerOn = true;
-
-    http.post(
-      Uri.parse('https://wubachat.com/api/app_api.php'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'action': 'initiate_call', 'user_id': widget.userId, 'recipient': widget.phone, 'call_type': callType}),
-    );
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setCallState) {
-          return Dialog(
-            backgroundColor: const Color(0xFF111B21),
-            insetPadding: const EdgeInsets.all(12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            child: Container(
-              height: 480,
-              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 45,
-                        backgroundColor: const Color(0xFF00A884),
-                        child: Text(
-                          widget.name.isNotEmpty ? widget.name.substring(0, 1).toUpperCase() : 'U',
-                          style: const TextStyle(fontSize: 36, color: Colors.white, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 6),
-                      Text(
-                        callType == 'video' ? 'Wubachat Video Call (Encrypted)' : 'Wubachat Voice Call (Encrypted)',
-                        style: const TextStyle(color: Colors.white70, fontSize: 13),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('Ringing...', style: TextStyle(color: Color(0xFF25D366), fontSize: 14, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      IconButton(
-                        icon: Icon(isMuted ? Icons.mic_off : Icons.mic, color: Colors.white, size: 28),
-                        onPressed: () => setCallState(() => isMuted = !isMuted),
-                      ),
-                      IconButton(
-                        icon: Icon(callType == 'video' ? Icons.videocam : Icons.volume_up, color: Colors.white, size: 28),
-                        onPressed: () => setCallState(() => isSpeakerOn = !isSpeakerOn),
-                      ),
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: Colors.red,
-                        child: IconButton(
-                          icon: const Icon(Icons.call_end, color: Colors.white, size: 28),
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _fetchMessages();
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  // --- COMPLETE WHATSAPP EMOJI PICKER DRAWER ---
-  void _openFullEmojiPicker() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => DefaultTabController(
-        length: _whatsappEmojiCategories.keys.length,
-        child: Container(
-          height: 320,
-          padding: const EdgeInsets.only(top: 10),
-          child: Column(
-            children: [
-              TabBar(
-                isScrollable: true,
-                indicatorColor: const Color(0xFF00A884),
-                labelColor: const Color(0xFF00A884),
-                unselectedLabelColor: Colors.grey,
-                tabs: _whatsappEmojiCategories.keys.map((k) => Tab(text: k)).toList(),
-              ),
-              Expanded(
-                child: TabBarView(
-                  children: _whatsappEmojiCategories.values.map((list) {
-                    return GridView.builder(
-                      padding: const EdgeInsets.all(12),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, mainAxisSpacing: 8, crossAxisSpacing: 8),
-                      itemCount: list.length,
-                      itemBuilder: (_, i) => GestureDetector(
-                        onTap: () {
-                          _msgController.text += list[i];
-                          _msgController.selection = TextSelection.fromPosition(TextPosition(offset: _msgController.text.length));
-                        },
-                        child: Center(child: Text(list[i], style: const TextStyle(fontSize: 26))),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // --- ATTACHMENTS PICKER (DOCUMENTS, CAMERA, GALLERY, CONTACT, LOCATION) ---
-  void _openAttachmentPicker() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Wrap(
-          spacing: 24,
-          runSpacing: 20,
-          alignment: WrapAlignment.center,
-          children: [
-            _attachmentOption(Icons.insert_drive_file, 'Document', const Color(0xFF5F66CD), () {
-              Navigator.pop(ctx);
-              _sendMessage('wubachat', mediaType: 'document', mediaUrl: 'https://wubachat.com/uploads/document.pdf', customText: '📄 Inspection_Report.pdf');
-            }),
-            _attachmentOption(Icons.camera_alt, 'Camera', const Color(0xFFD3396D), () {
-              Navigator.pop(ctx);
-              _sendMessage('wubachat', mediaType: 'image', mediaUrl: 'https://placehold.co/600x400/008069/ffffff?text=Vehicle+Inspection+Snap', customText: '📷 Live Inspection Capture');
-            }),
-            _attachmentOption(Icons.image, 'Gallery', const Color(0xFFAC44CF), () {
-              Navigator.pop(ctx);
-              _sendMessage('wubachat', mediaType: 'image', mediaUrl: 'https://placehold.co/600x400/00A884/ffffff?text=Gallery+Uploaded+Photo', customText: '🖼️ Claim_Chassis_Damage.jpg');
-            }),
-            _attachmentOption(Icons.location_on, 'Location', const Color(0xFF1FA855), () {
-              Navigator.pop(ctx);
-              _sendMessage('wubachat', mediaType: 'text', customText: '📍 Location: https://maps.google.com/?q=28.6139,77.2090');
-            }),
-            _attachmentOption(Icons.person, 'Contact', const Color(0xFF009DE2), () {
-              Navigator.pop(ctx);
-              _sendMessage('wubachat', mediaType: 'text', customText: '📇 Contact: Er. Wajid Ali (+91 8909034515)');
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _attachmentOption(IconData icon, String label, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircleAvatar(radius: 28, backgroundColor: color, child: Icon(icon, color: Colors.white, size: 26)),
-          const SizedBox(height: 6),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
-
-  // --- VOICE RECORDING SIMULATOR (HOLD / TAP MIC) ---
-  void _startVoiceRecording() {
-    setState(() {
-      _isRecordingVoice = true;
-      _voiceSeconds = 0;
-    });
-    _voiceTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      setState(() => _voiceSeconds++);
-    });
-  }
-
-  void _finishAndSendVoiceRecording() {
-    _voiceTimer?.cancel();
-    final duration = _voiceSeconds;
-    setState(() => _isRecordingVoice = false);
-    _sendMessage(
-      'wubachat',
-      mediaType: 'audio',
-      mediaUrl: 'https://wubachat.com/uploads/voice_sample.mp3',
-      customText: '🎤 Voice Note (${duration < 10 ? "0$duration" : duration}s)',
-    );
-  }
-
-  void _cancelVoiceRecording() {
-    _voiceTimer?.cancel();
-    setState(() => _isRecordingVoice = false);
-  }
-
-  // --- SWIPE-TO-REPLY TRIGGER ---
-  void _triggerReplyToMessage(Map<String, dynamic> msg) {
-    setState(() {
-      _replyToWamid = msg['wamid'] ?? msg['id'].toString();
-      _replyToText = msg['message_text'];
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Replying to: ${_replyToText ?? ""}'), duration: const Duration(seconds: 1)),
-    );
-  }
-
-  // --- LONG-PRESS MESSAGE OPTIONS (REACTION, STAR, INFO, COPY, DELETE, TRANSLATE) ---
-  void _showMessageOptions(Map<String, dynamic> msg) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Floating Emoji Reactions
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: ['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) {
-                  return GestureDetector(
-                    onTap: () async {
-                      Navigator.pop(ctx);
-                      await http.post(
-                        Uri.parse('https://wubachat.com/api/app_api.php'),
-                        headers: {'Content-Type': 'application/json'},
-                        body: jsonEncode({'action': 'react_message', 'user_id': widget.userId, 'message_id': msg['id'], 'emoji': emoji}),
-                      );
-                      _fetchMessages();
-                    },
-                    child: Text(emoji, style: const TextStyle(fontSize: 28)),
-                  );
-                }).toList(),
-              ),
-              const Divider(height: 25),
-              ListTile(
-                leading: const Icon(Icons.reply, color: Color(0xFF008069)),
-                title: const Text('Reply'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _triggerReplyToMessage(msg);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.star_border, color: Colors.amber),
-                title: const Text('Star Message'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message Starred')));
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.copy, color: Color(0xFF008069)),
-                title: const Text('Copy Text'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.info_outline, color: Color(0xFF008069)),
-                title: const Text('Message Info'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _openMessageInfoModal(msg);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Delete Message'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _confirmDeleteMessage(msg);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _openMessageInfoModal(Map<String, dynamic> msg) {
-    final status = (msg['status'] ?? 'sent').toString().toUpperCase();
-    final time = msg['created_at']?.toString() ?? 'Just now';
-
+  // --- MULTI-MESSAGE DELETE & FORWARD ---
+  void _deleteSelectedBulk() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Message Info', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: const Color(0xFFF0F2F5), borderRadius: BorderRadius.circular(8)),
-              child: Text(msg['message_text'] ?? '', style: const TextStyle(fontSize: 13)),
-            ),
-            const SizedBox(height: 12),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Read'), Text(status == 'READ' ? time : 'Not read yet', style: const TextStyle(color: Colors.grey))]),
-            const Divider(height: 16),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Delivered'), Text(status == 'DELIVERED' || status == 'READ' ? time : 'Pending', style: const TextStyle(color: Colors.grey))]),
-            const Divider(height: 16),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Sent'), Text(time, style: const TextStyle(color: Colors.grey))]),
-          ],
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
-      ),
-    );
-  }
-
-  void _confirmDeleteMessage(Map<String, dynamic> msg) {
-    final isMe = (msg['direction'] == 'outbound' || msg['is_me'] == 1);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Message?'),
-        content: Text(isMe ? 'Delete for everyone or just for you?' : 'Delete for yourself?'),
+        title: Text('Delete ${_selectedMessageIds.length} Messages?'),
+        content: const Text('Do you want to delete these selected messages?'),
         actions: [
           TextButton(
             onPressed: () async {
@@ -1147,54 +951,195 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               await http.post(
                 Uri.parse('https://wubachat.com/api/app_api.php'),
                 headers: {'Content-Type': 'application/json'},
-                body: jsonEncode({'action': 'delete_message', 'user_id': widget.userId, 'message_id': msg['id'], 'delete_type': 'me'}),
+                body: jsonEncode({'action': 'delete_messages_bulk', 'user_id': widget.userId, 'message_ids': _selectedMessageIds.toList(), 'delete_type': 'me'}),
               );
+              setState(() {
+                _isSelectMode = false;
+                _selectedMessageIds.clear();
+              });
               _fetchMessages();
             },
             child: const Text('Delete for Me'),
           ),
-          if (isMe)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                await http.post(
-                  Uri.parse('https://wubachat.com/api/app_api.php'),
-                  headers: {'Content-Type': 'application/json'},
-                  body: jsonEncode({'action': 'delete_message', 'user_id': widget.userId, 'message_id': msg['id'], 'delete_type': 'everyone'}),
-                );
-                _fetchMessages();
-              },
-              child: const Text('Delete for Everyone'),
-            ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await http.post(
+                Uri.parse('https://wubachat.com/api/app_api.php'),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({'action': 'delete_messages_bulk', 'user_id': widget.userId, 'message_ids': _selectedMessageIds.toList(), 'delete_type': 'everyone'}),
+              );
+              setState(() {
+                _isSelectMode = false;
+                _selectedMessageIds.clear();
+              });
+              _fetchMessages();
+            },
+            child: const Text('Delete for Everyone'),
+          ),
         ],
       ),
     );
+  }
+
+  // --- PARAMOUNT SURVEY TEMPLATE MODAL ---
+  void _openSurveyTemplateModal() {
+    final claimCtrl = TextEditingController();
+    final vehicleCtrl = TextEditingController();
+    final linkCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Paramount Inspection Link Template', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Meta 3-Body Variables (Costs ₹0.50 / 1 Credit)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            const SizedBox(height: 10),
+            TextField(controller: claimCtrl, decoration: const InputDecoration(labelText: 'Claim Number', border: OutlineInputBorder())),
+            const SizedBox(height: 8),
+            TextField(controller: vehicleCtrl, decoration: const InputDecoration(labelText: 'Vehicle Number', border: OutlineInputBorder())),
+            const SizedBox(height: 8),
+            TextField(controller: linkCtrl, decoration: const InputDecoration(labelText: 'Inspection Link', border: OutlineInputBorder())),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF008069), foregroundColor: Colors.white),
+            onPressed: () async {
+              final c = claimCtrl.text.trim();
+              final v = vehicleCtrl.text.trim();
+              final l = linkCtrl.text.trim();
+              if (c.isEmpty || v.isEmpty || l.isEmpty) return;
+              Navigator.pop(ctx);
+
+              await http.post(
+                Uri.parse('https://wubachat.com/api/app_api.php'),
+                headers: {'Content-Type': 'application/json'},
+                body: jsonEncode({
+                  'action': 'send_message',
+                  'user_id': widget.userId,
+                  'recipient': widget.phone,
+                  'mode': 'template',
+                  'claim_number': c,
+                  'vehicle_number': v,
+                  'inspection_link': l
+                }),
+              );
+              _fetchMessages();
+            },
+            child: const Text('Send Official WhatsApp'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- PARSED MEDIA RENDERER (IMAGES & DOCS INSTEAD OF RAW TEXT) ---
+  Widget _buildParsedBubbleContent(String rawText) {
+    if (rawText.startsWith('[Image]:')) {
+      final url = rawText.replaceFirst('[Image]:', '').trim();
+      return GestureDetector(
+        onTap: () {
+          // Open Lightbox
+          showDialog(
+            context: context,
+            builder: (_) => Dialog(
+              backgroundColor: Colors.transparent,
+              child: Stack(
+                children: [
+                  Center(child: Image.network(url, fit: BoxFit.contain)),
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            url,
+            height: 180,
+            width: 240,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const Row(children: [Icon(Icons.broken_image), Text(' Image Error')]),
+          ),
+        ),
+      );
+    } else if (rawText.startsWith('[Document]:')) {
+      final url = rawText.replaceFirst('[Document]:', '').trim();
+      final name = url.split('/').last;
+      return GestureDetector(
+        onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.picture_as_pdf, color: Colors.red, size: 26),
+              const SizedBox(width: 8),
+              Flexible(child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis)),
+              const SizedBox(width: 6),
+              const Icon(Icons.download, size: 18, color: Color(0xFF008069)),
+            ],
+          ),
+        ),
+      );
+    }
+    return Text(rawText, style: const TextStyle(fontSize: 14.5));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFEFE7DE),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF008069),
-        leading: widget.isEmbedded ? null : IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-            const Text('⚡ Wubachat Connected', style: TextStyle(color: Colors.white70, fontSize: 10)),
-          ],
-        ),
-        actions: [
-          IconButton(icon: const Icon(Icons.videocam, color: Colors.white), onPressed: () => _openCallModal('video'), tooltip: 'Video Call'),
-          IconButton(icon: const Icon(Icons.call, color: Colors.white), onPressed: () => _openCallModal('audio'), tooltip: 'Voice Call'),
-          IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: () => _fetchMessages(initial: false)),
-        ],
-      ),
+      appBar: _isSelectMode
+          ? AppBar(
+              backgroundColor: const Color(0xFF008069),
+              title: Text('${_selectedMessageIds.length} Selected', style: const TextStyle(color: Colors.white)),
+              leading: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => setState(() {
+                  _isSelectMode = false;
+                  _selectedMessageIds.clear();
+                }),
+              ),
+              actions: [
+                IconButton(icon: const Icon(Icons.delete, color: Colors.white), onPressed: _deleteSelectedBulk),
+              ],
+            )
+          : AppBar(
+              backgroundColor: const Color(0xFF008069),
+              leading: widget.isEmbedded ? null : IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 15.5, fontWeight: FontWeight.bold)),
+                  Text(
+                    _selectedChannel == 'whatsapp' ? 'via Official Meta Cloud API' : 'via Wubachat Free',
+                    style: const TextStyle(color: Colors.white70, fontSize: 10),
+                  ),
+                ],
+              ),
+              actions: [
+                IconButton(icon: const Icon(Icons.assignment, color: Colors.white), onPressed: _openSurveyTemplateModal, tooltip: 'Send Survey Template'),
+                IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: () => _fetchMessages(silent: false)),
+              ],
+            ),
       body: Column(
         children: [
-          // MESSAGES STREAM WITH SWIPE-TO-REPLY & LONG-PRESS
+          // MESSAGES LIST
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF008069)))
@@ -1204,18 +1149,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
                       final m = _messages[index];
+                      final id = (m['id'] as num?)?.toInt() ?? index;
                       final bool isMe = (m['direction'] == 'outbound' || m['is_me'] == 1);
                       final String text = m['message_text'] ?? '';
                       final String status = m['status'] ?? 'sent';
                       final String reaction = m['reaction'] ?? '';
                       final String time = m['created_at'] != null ? m['created_at'].toString().split(' ').last : '';
+                      final bool isSelected = _selectedMessageIds.contains(id);
 
                       return Dismissible(
-                        key: ValueKey('msg_${m['id']}_$index'),
+                        key: ValueKey('msg_key_$id'),
                         direction: DismissDirection.startToEnd,
-                        confirmDismiss: (direction) async {
-                          _triggerReplyToMessage(m);
-                          return false; // Does not remove message, only quotes it
+                        confirmDismiss: (_) async {
+                          setState(() {
+                            _replyToWamid = m['wamid'] ?? id.toString();
+                            _replyToText = text;
+                          });
+                          return false; // Quote immediately, do not remove
                         },
                         background: Container(
                           alignment: Alignment.centerLeft,
@@ -1223,51 +1173,67 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                           child: const Icon(Icons.reply, color: Color(0xFF008069)),
                         ),
                         child: GestureDetector(
-                          onLongPress: () => _showMessageOptions(m),
-                          child: Align(
-                            alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                Container(
-                                  margin: const EdgeInsets.symmetric(vertical: 4),
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                                  decoration: BoxDecoration(
-                                    color: isMe ? const Color(0xFFE7FFDB) : Colors.white,
-                                    borderRadius: BorderRadius.circular(10),
-                                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 2)],
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(text, style: const TextStyle(fontSize: 14)),
-                                      const SizedBox(height: 3),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(time, style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600)),
-                                          if (isMe) ...[
-                                            const SizedBox(width: 4),
-                                            Icon(status == 'read' ? Icons.done_all : Icons.done, size: 14, color: status == 'read' ? const Color(0xFF34B7F1) : Colors.grey),
+                          onLongPress: () {
+                            setState(() {
+                              _isSelectMode = true;
+                              _selectedMessageIds.add(id);
+                            });
+                          },
+                          onTap: () {
+                            if (_isSelectMode) {
+                              setState(() {
+                                if (isSelected) {
+                                  _selectedMessageIds.remove(id);
+                                  if (_selectedMessageIds.isEmpty) _isSelectMode = false;
+                                } else {
+                                  _selectedMessageIds.add(id);
+                                }
+                              });
+                            }
+                          },
+                          child: Container(
+                            color: isSelected ? Colors.teal.withOpacity(0.2) : Colors.transparent,
+                            child: Align(
+                              alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Container(
+                                    margin: const EdgeInsets.symmetric(vertical: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                                    decoration: BoxDecoration(
+                                      color: isMe ? const Color(0xFFE7FFDB) : Colors.white,
+                                      borderRadius: BorderRadius.circular(10),
+                                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 2)],
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        _buildParsedBubbleContent(text),
+                                        const SizedBox(height: 3),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(time, style: TextStyle(fontSize: 9.5, color: Colors.grey.shade600)),
+                                            if (isMe) ...[
+                                              const SizedBox(width: 4),
+                                              Icon(status == 'read' ? Icons.done_all : Icons.done, size: 14, color: status == 'read' ? const Color(0xFF34B7F1) : Colors.grey),
+                                            ],
                                           ],
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (reaction.isNotEmpty)
-                                  Positioned(
-                                    bottom: -5,
-                                    right: isMe ? 4 : null,
-                                    left: !isMe ? 4 : null,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(2),
-                                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                                      child: Text(reaction, style: const TextStyle(fontSize: 12)),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                              ],
+                                  if (reaction.isNotEmpty)
+                                    Positioned(
+                                      bottom: -5,
+                                      right: isMe ? 4 : null,
+                                      left: !isMe ? 4 : null,
+                                      child: Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: Text(reaction, style: const TextStyle(fontSize: 12))),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -1276,7 +1242,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   ),
           ),
 
-          // ACTIVE QUOTE BANNER
+          // ACTIVE QUOTE REPLY STRIP
           if (_replyToWamid != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -1291,69 +1257,59 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               ),
             ),
 
-          // LIVE VOICE RECORDING STRIP
-          if (_isRecordingVoice)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              color: const Color(0xFFF0F2F5),
-              child: Row(
-                children: [
-                  const Icon(Icons.fiber_manual_record, color: Colors.red, size: 16),
-                  const SizedBox(width: 8),
-                  Text('Recording Voice Note: ${_voiceSeconds}s', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red)),
-                  const Spacer(),
-                  IconButton(icon: const Icon(Icons.delete, color: Colors.grey), onPressed: _cancelVoiceRecording),
-                  IconButton(icon: const Icon(Icons.send, color: Color(0xFF00A884)), onPressed: _finishAndSendVoiceRecording),
-                ],
-              ),
-            ),
-
-          // FULL INPUT BAR WITH DUAL ACTION BUTTONS, ATTACHMENT & FULL EMOJIS
+          // COMPACT BOTTOM INPUT BAR (CHANNEL TOGGLE + SINGLE COMPACT SEND)
           Container(
             padding: const EdgeInsets.all(8),
             color: Colors.white,
-            child: Column(
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    IconButton(icon: const Icon(Icons.emoji_emotions_outlined, color: Colors.grey), onPressed: _openFullEmojiPicker),
-                    IconButton(icon: const Icon(Icons.attach_file, color: Colors.grey), onPressed: _openAttachmentPicker),
-                    Expanded(
-                      child: TextField(
-                        controller: _msgController,
-                        decoration: const InputDecoration(hintText: 'Type a message...', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 6)),
-                      ),
+                // COMPACT TOGGLE PILL
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedChannel = (_selectedChannel == 'whatsapp') ? 'wubachat' : 'whatsapp';
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: _selectedChannel == 'whatsapp' ? const Color(0xFF128C7E) : const Color(0xFF00A884),
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                    IconButton(
-                      icon: Icon(_isRecordingVoice ? Icons.stop : Icons.mic, color: _isRecordingVoice ? Colors.red : const Color(0xFF008069)),
-                      onPressed: () {
-                        if (_isRecordingVoice) {
-                          _finishAndSendVoiceRecording();
-                        } else {
-                          _startVoiceRecording();
-                        }
-                      },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_selectedChannel == 'whatsapp' ? Icons.phone_android : Icons.bolt, size: 14, color: Colors.white),
+                        const SizedBox(width: 4),
+                        Text(
+                          _selectedChannel == 'whatsapp' ? 'WhatsApp' : 'Wubachat',
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A884), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7)),
-                      icon: const Icon(Icons.send, size: 13),
-                      label: const Text('Send Wubachat', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      onPressed: () => _sendMessage('wubachat'),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(22)),
+                    child: TextField(
+                      controller: _msgController,
+                      decoration: const InputDecoration(hintText: 'Type a message...', border: InputBorder.none),
+                      onSubmitted: (_) => _handleSendDecision(),
                     ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF128C7E), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7)),
-                      icon: const Icon(Icons.send, size: 13),
-                      label: const Text('Send WhatsApp', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      onPressed: () => _sendMessage('whatsapp'),
-                    ),
-                  ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                // SINGLE WHATSAPP-STYLE CIRCULAR SEND ICON
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: const Color(0xFF00A884),
+                  child: IconButton(
+                    icon: const Icon(Icons.send, color: Colors.white, size: 18),
+                    onPressed: _handleSendDecision,
+                  ),
                 ),
               ],
             ),
