@@ -35,7 +35,7 @@ class WubachatApp extends StatelessWidget {
 }
 
 // =========================================================================
-// 1. AUTH SCREEN (ORIGINAL WITH FLAG, FOOTER & FOUNDER DETAILS)
+// 1. AUTH SCREEN (WITH FLAG, FOOTER & FOUNDER DETAILS)
 // =========================================================================
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -384,7 +384,7 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // =========================================================================
-// 2. DASHBOARD HOME (WITH SETTINGS CONSOLE, LOGOUT, FILTERS & DYNAMIC QR)
+// 2. DASHBOARD HOME (SETTINGS, LOGOUT, FILTERS, DYNAMIC QR)
 // =========================================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -597,7 +597,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               const Text('Meta Cloud API', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(color: Colors.emerald.shade100, borderRadius: BorderRadius.circular(8)),
+                                decoration: BoxDecoration(color: const Color(0xFFD1FAE5), borderRadius: BorderRadius.circular(8)),
                                 child: const Text('Connected', style: TextStyle(color: Color(0xFF008069), fontSize: 11, fontWeight: FontWeight.bold)),
                               ),
                             ],
@@ -1279,7 +1279,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     {'code': 'my', 'name': 'Myanmar (Burmese)'},
     {'code': 'ps', 'name': 'Pashto (پښتو)'},
     {'code': 'sd', 'name': 'Sindhi (سنڌي)'},
-    {'code': 'si', 'name': 'Sinhala (සිංහල)'},
+    {'code': 'si', 'name': 'Sinhala (සිଂහල)'},
     {'code': 'so', 'name': 'Somali'},
     {'code': 'sw', 'name': 'Swahili (Kiswahili)'},
     {'code': 'tg', 'name': 'Tajik (Тоҷикӣ)'},
@@ -1583,6 +1583,85 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     setState(() => _isRecordingVoice = false);
   }
 
+  void _openCallModal(String callType) {
+    bool isMuted = false;
+    bool isSpeakerOn = true;
+
+    http.post(
+      Uri.parse('https://wubachat.com/api/app_api.php'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'action': 'initiate_call', 'user_id': widget.userId, 'recipient': widget.phone, 'call_type': callType}),
+    );
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setCallState) {
+          return Dialog(
+            backgroundColor: const Color(0xFF111B21),
+            insetPadding: const EdgeInsets.all(12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            child: Container(
+              height: 480,
+              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 45,
+                        backgroundColor: const Color(0xFF00A884),
+                        child: Text(
+                          widget.name.isNotEmpty ? widget.name.substring(0, 1).toUpperCase() : 'U',
+                          style: const TextStyle(fontSize: 36, color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Text(
+                        callType == 'video' ? 'Wubachat Video Call (Encrypted)' : 'Wubachat Voice Call (Encrypted)',
+                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('Ringing...', style: TextStyle(color: Color(0xFF25D366), fontSize: 14, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      IconButton(
+                        icon: Icon(isMuted ? Icons.mic_off : Icons.mic, color: Colors.white, size: 28),
+                        onPressed: () => setCallState(() => isMuted = !isMuted),
+                      ),
+                      IconButton(
+                        icon: Icon(callType == 'video' ? Icons.videocam : Icons.volume_up, color: Colors.white, size: 28),
+                        onPressed: () => setCallState(() => isSpeakerOn = !isSpeakerOn),
+                      ),
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: Colors.red,
+                        child: IconButton(
+                          icon: const Icon(Icons.call_end, color: Colors.white, size: 28),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _fetchMessages();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _deleteSelectedBulk() {
     showDialog(
       context: context,
@@ -1652,7 +1731,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A884), foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF008069), foregroundColor: Colors.white),
             onPressed: () async {
               final c = claimCtrl.text.trim();
               final v = vehicleCtrl.text.trim();
@@ -1784,6 +1863,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 ],
               ),
               actions: [
+                IconButton(icon: const Icon(Icons.videocam, color: Colors.white), onPressed: () => _openCallModal('video'), tooltip: 'Video Call'),
+                IconButton(icon: const Icon(Icons.call, color: Colors.white), onPressed: () => _openCallModal('audio'), tooltip: 'Voice Call'),
                 IconButton(icon: const Icon(Icons.assignment, color: Colors.white), onPressed: _openSurveyTemplateModal, tooltip: 'Send Survey Template'),
                 IconButton(icon: const Icon(Icons.refresh, color: Colors.white), onPressed: () => _fetchMessages(silent: false)),
               ],
@@ -1978,7 +2059,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   onPressed: _openAttachmentPicker,
                   tooltip: 'Attachments',
                 ),
-                // 100+ LANGUAGES SELECTION DROPDOWN
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
@@ -1990,7 +2070,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     items: _all100Languages.map((lang) {
                       return DropdownMenuItem<String>(
                         value: lang['code'],
-                        child: Text(lang['name']!, style: const TextStyle(fontSize: 11)),
+                        child: Text(lang['name']!, style: const TextStyle(fontSize: 10.5)),
                       );
                     }).toList(),
                     onChanged: (val) {
