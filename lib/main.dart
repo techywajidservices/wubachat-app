@@ -5,14 +5,12 @@ import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// Global In-Memory Cache for 0ms Instant Loading
-final Map<String, List<dynamic>> _chatMemoryCache = {};
+// Global In-Memory Cache for 0ms Instant Loading & Theme Controller
 final ValueNotifier<ThemeMode> _themeNotifier = ValueNotifier(ThemeMode.light);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
-  final bool isLoggedIn = prefs.containsKey('user_id');
   final bool isDark = prefs.getBool('is_dark_theme') ?? false;
   _themeNotifier.value = isDark ? ThemeMode.dark : ThemeMode.light;
   runApp(const WubachatApp());
@@ -55,6 +53,9 @@ class WubachatApp extends StatelessWidget {
   }
 }
 
+// =========================================================================
+// 1. ROOT ROUTER
+// =========================================================================
 class RootGateScreen extends StatefulWidget {
   const RootGateScreen({super.key});
 
@@ -93,7 +94,7 @@ class _RootGateScreenState extends State<RootGateScreen> {
 }
 
 // =========================================================================
-// 1. AUTH SCREEN (USER + ADMIN BY EMAIL/PHONE, BRANDED FOOTER)
+// 2. AUTH SCREEN (USER + ADMIN BY EMAIL/PHONE, BRANDED FOOTER)
 // =========================================================================
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -179,7 +180,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     Center(
                       child: Image.asset(
                         'assets/logo.png',
-                        height: 100,
+                        height: 95,
                         fit: BoxFit.contain,
                         errorBuilder: (_, __, ___) => const Icon(Icons.chat_bubble_rounded, size: 75, color: Color(0xFF00A884)),
                       ),
@@ -291,7 +292,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             Container(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-              color: Colors.grey.shade100,
+              color: Colors.grey.withOpacity(0.08),
               child: Column(
                 children: [
                   GestureDetector(
@@ -317,7 +318,7 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 // =========================================================================
-// 2. USER HOME SCREEN (CLEAN HEADER, TOP TOGGLE, CHATS / CALLS / WALLET)
+// 3. USER HOME SCREEN (HEADER CHANNEL SWITCH, 3 TABS, MULTI-SELECT & SYNC)
 // =========================================================================
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
@@ -342,14 +343,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
   List<dynamic> allChats = [];
   bool isLoading = true;
 
-  // Multi-Select Mode for Chats
   bool isChatMultiSelect = false;
   final Set<String> selectedChatPhones = {};
-
-  // Calls & Wallet
   List<dynamic> callLogs = [];
-  List<dynamic> billingMessages = [];
-  List<dynamic> billingRecharges = [];
 
   @override
   void initState() {
@@ -377,7 +373,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
       userPhone = prefs.getString('user_phone') ?? '';
     });
 
-    // 0ms Disk Cache Pre-warm
     final cached = prefs.getString('cached_chats_data');
     if (cached != null) {
       try {
@@ -414,9 +409,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
       final d = jsonDecode(res.body);
       if (d['status'] == true && mounted) {
         final List<dynamic> fetched = d['chats'] ?? [];
-        setState(() {
-          allChats = fetched;
-        });
+        setState(() => allChats = fetched);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('cached_chats_data', jsonEncode(fetched));
       }
@@ -434,7 +427,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
     } catch (_) {}
   }
 
-  // --- MULTI-SELECT CHAT BULK ACTIONS ---
   Future<void> _moveSelectedChats(String targetFolder) async {
     for (String p in selectedChatPhones) {
       await http.post(
@@ -465,7 +457,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
     _fetchChats(silent: false);
   }
 
-  // --- CONTACT AVATAR WHATSAPP POPUP MODAL ---
   void _openAvatarModal(Map<String, dynamic> chat) {
     showDialog(
       context: context,
@@ -475,16 +466,13 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              height: 220,
+              height: 200,
               width: double.infinity,
-              decoration: const BoxDecoration(
-                color: Color(0xFF008069),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
+              decoration: const BoxDecoration(color: Color(0xFF008069), borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
               child: Center(
                 child: Text(
                   chat['contact_name'].toString().substring(0, 1).toUpperCase(),
-                  style: const TextStyle(fontSize: 72, color: Colors.white, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 68, color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -502,27 +490,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
                     Navigator.push(context, MaterialPageRoute(builder: (_) => ChatDetailScreen(name: chat['contact_name'], phone: chat['phone_number'], userId: userId, defaultChannel: selectedChannel)));
                   },
                 ),
-                IconButton(
-                  icon: const Icon(Icons.call, color: Color(0xFF008069)),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _initiateCallLog(chat['phone_number'], chat['contact_name'], 'audio');
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.videocam, color: Color(0xFF008069)),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _initiateCallLog(chat['phone_number'], chat['contact_name'], 'video');
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.info_outline, color: Color(0xFF008069)),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _openContactDetailsDrawer(chat['phone_number'], chat['contact_name']);
-                  },
-                ),
+                IconButton(icon: const Icon(Icons.call, color: Color(0xFF008069)), onPressed: () => Navigator.pop(ctx)),
+                IconButton(icon: const Icon(Icons.videocam, color: Color(0xFF008069)), onPressed: () => Navigator.pop(ctx)),
               ],
             ),
             const SizedBox(height: 10),
@@ -532,42 +501,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
     );
   }
 
-  void _initiateCallLog(String phone, String name, String type) async {
-    await http.post(
-      Uri.parse('https://wubachat.com/api/app_api.php'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'action': 'log_call', 'user_id': userId, 'recipient': phone, 'contact_name': name, 'call_type': type}),
-    );
-    _fetchCalls();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Starting $type call to $name...')));
-  }
-
-  void _openContactDetailsDrawer(String phone, String name) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircleAvatar(radius: 32, backgroundColor: const Color(0xFF008069), child: Text(name.substring(0, 1).toUpperCase(), style: const TextStyle(fontSize: 28, color: Colors.white))),
-            const SizedBox(height: 10),
-            Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            Text('+$phone', style: const TextStyle(color: Colors.grey)),
-            const Divider(height: 25),
-            ListTile(
-              leading: const Icon(Icons.block, color: Colors.red),
-              title: const Text('Block Contact', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-              onTap: () => Navigator.pop(ctx),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- SETTINGS CONSOLE (THEME, INCREMENTAL SYNC, EDIT PROFILE) ---
   void _openSettingsConsole() {
     showModalBottomSheet(
       context: context,
@@ -615,7 +548,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
                   ListTile(
                     leading: const Icon(Icons.sync, color: Color(0xFF008069)),
                     title: const Text('Sync All Chats to Local Storage', style: TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: const Text('Sequential incremental sync for 0ms instant loading'),
+                    subtitle: const Text('Sequential incremental sync for 0ms loading'),
                     onTap: () {
                       Navigator.pop(ctx);
                       _startIncrementalSmartSync();
@@ -698,7 +631,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
     );
   }
 
-  // --- INCREMENTAL SMART SYNC ENGINE (ONE-BY-ONE WITH PROGRESS) ---
   void _startIncrementalSmartSync() async {
     showDialog(
       context: context,
@@ -726,9 +658,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
                   final k10 = phone.length >= 10 ? phone.substring(phone.length - 10) : phone;
                   await prefs.setString('wuba_chat_$k10', jsonEncode(data['messages'] ?? []));
                 }
-              } catch (_) {
-                // Graceful skip on network timeout
-              }
+              } catch (_) {}
               await Future.delayed(const Duration(milliseconds: 150));
             }
             if (Navigator.canPop(ctx)) Navigator.pop(ctx);
@@ -777,11 +707,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
                         dense: true,
                         title: Text('₹${r['amount']} (${r['status'].toString().toUpperCase()})', style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text('UTR: ${r['utr_number']}\n${r['created_at']}'),
-                        trailing: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF008069), foregroundColor: Colors.white),
-                          child: const Text('Receipt', style: TextStyle(fontSize: 10)),
-                          onPressed: () => _showOfficialReceiptCard(r),
-                        ),
                       );
                     },
                   ),
@@ -790,32 +715,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
         ),
       );
     }
-  }
-
-  void _showOfficialReceiptCard(Map<String, dynamic> r) {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('WUBACHAT OFFICIAL RECEIPT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF008069))),
-              const Divider(height: 20),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Receipt ID:'), Text('#TXN-${r['id']}', style: const TextStyle(fontWeight: FontWeight.bold))]),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Date:'), Text('${r['created_at']}')]),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Amount Paid:'), Text('₹${r['amount']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF008069)))]),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('UTR Ref:'), Text('${r['utr_number']}', style: const TextStyle(fontFamily: 'monospace'))]),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Status:'), Text('${r['status']}'.toUpperCase(), style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))]),
-              const Divider(height: 25),
-              ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -837,12 +736,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
               backgroundColor: const Color(0xFF008069),
               title: const Text('Wubachat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.white)),
               actions: [
-                // Top Header Channel Switch Toggle Pill
                 GestureDetector(
                   onTap: () {
-                    setState(() {
-                      selectedChannel = selectedChannel == 'whatsapp' ? 'wubachat' : 'whatsapp';
-                    });
+                    setState(() => selectedChannel = selectedChannel == 'whatsapp' ? 'wubachat' : 'whatsapp');
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -892,7 +788,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
   Widget _buildChatsTab() {
     return Column(
       children: [
-        // Universal Search Bar (Vertically Centered)
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
           child: Container(
@@ -916,7 +811,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
             ),
           ),
         ),
-        // Filter Chips (All, Unread, Important, Archive)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: SingleChildScrollView(
@@ -964,32 +858,13 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
                             ),
                             title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5), overflow: TextOverflow.ellipsis),
                             subtitle: Text(lastMsg, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600)),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (unread > 0)
-                                  Container(
+                            trailing: unread > 0
+                                ? Container(
                                     padding: const EdgeInsets.all(5),
                                     decoration: const BoxDecoration(color: Color(0xFF25D366), shape: BoxShape.circle),
                                     child: Text('$unread', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                  ),
-                                PopupMenuButton<String>(
-                                  icon: const Icon(Icons.more_vert, size: 18, color: Colors.grey),
-                                  onSelected: (val) async {
-                                    if (val == 'archive') _moveSingleChat(phone, 'archive');
-                                    if (val == 'important') _moveSingleChat(phone, 'important');
-                                    if (val == 'unread') _moveSingleChat(phone, 'unread');
-                                    if (val == 'delete') _deleteSingleChat(phone);
-                                  },
-                                  itemBuilder: (_) => [
-                                    PopupMenuItem(value: 'archive', child: Text(chat['is_archived'] == 1 ? 'Unarchive Chat' : 'Archive Chat')),
-                                    PopupMenuItem(value: 'important', child: Text(chat['is_important'] == 1 ? 'Remove Important' : 'Mark as Important')),
-                                    const PopupMenuItem(value: 'unread', child: Text('Mark as Unread')),
-                                    const PopupMenuItem(value: 'delete', child: Text('Delete Conversation', style: TextStyle(color: Colors.red))),
-                                  ],
-                                ),
-                              ],
-                            ),
+                                  )
+                                : null,
                             onLongPress: () {
                               setState(() {
                                 isChatMultiSelect = true;
@@ -1022,24 +897,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
     );
   }
 
-  void _moveSingleChat(String phone, String target) async {
-    await http.post(
-      Uri.parse('https://wubachat.com/api/app_api.php'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'action': 'move_chat', 'user_id': userId, 'phone': phone, 'target': target}),
-    );
-    _fetchChats(silent: false);
-  }
-
-  void _deleteSingleChat(String phone) async {
-    await http.post(
-      Uri.parse('https://wubachat.com/api/app_api.php'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'action': 'delete_conversation', 'user_id': userId, 'phone': phone}),
-    );
-    _fetchChats(silent: false);
-  }
-
   Widget _filterChip(String key, String label) {
     final isSel = currentFilter == key;
     return GestureDetector(
@@ -1067,19 +924,10 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
             separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (_, i) {
               final c = callLogs[i];
-              final isVideo = c['call_type'] == 'video';
-              final isOutgoing = c['direction'] == 'outgoing';
               return ListTile(
-                leading: CircleAvatar(backgroundColor: const Color(0xFF008069).withOpacity(0.15), child: Icon(isVideo ? Icons.videocam : Icons.call, color: const Color(0xFF008069))),
+                leading: const CircleAvatar(backgroundColor: Color(0xFFE7FFDB), child: Icon(Icons.call, color: Color(0xFF008069))),
                 title: Text(c['contact_name'] ?? ('+' + c['recipient_phone']), style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Row(
-                  children: [
-                    Icon(isOutgoing ? Icons.call_made : Icons.call_received, size: 14, color: isOutgoing ? Colors.green : Colors.blue),
-                    const SizedBox(width: 4),
-                    Text('${c['created_at']} • ${c['duration_seconds']}s', style: const TextStyle(fontSize: 11)),
-                  ],
-                ),
-                trailing: IconButton(icon: Icon(isVideo ? Icons.videocam : Icons.call, color: const Color(0xFF008069)), onPressed: () => _initiateCallLog(c['recipient_phone'], c['contact_name'], c['call_type'])),
+                subtitle: Text('${c['created_at']} • ${c['duration_seconds']}s'),
               );
             },
           );
@@ -1088,93 +936,18 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
   Widget _buildWalletTab() {
     return Padding(
       padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF008069), Color(0xFF00A884)]), borderRadius: BorderRadius.circular(16)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Live Balance', style: TextStyle(color: Colors.white70)),
-                const SizedBox(height: 6),
-                Text('₹${balance.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: () => _openRechargeModal(),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Balance via UPI QR'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF008069)),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          ListTile(
-            leading: const Icon(Icons.receipt_long, color: Color(0xFF008069)),
-            title: const Text('Transaction Receipts', style: TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: const Text('View and download official credit slips'),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-            onTap: () => _openBillingReceiptsModal(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _openRechargeModal() {
-    final amtCtrl = TextEditingController(text: '100');
-    final utrCtrl = TextEditingController();
-    double currentAmt = 100.0;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          final upiUri = 'upi://pay?pa=wubachat@okaxis&pn=Wubachat%20Payments&am=${currentAmt.toStringAsFixed(2)}&cu=INR';
-          final qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${Uri.encodeComponent(upiUri)}';
-          return AlertDialog(
-            title: const Text('Recharge via UPI (Min: ₹100)'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.network(qrUrl, height: 150, width: 150),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: amtCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Amount (INR)', prefixText: '₹ '),
-                    onChanged: (val) {
-                      final p = double.tryParse(val) ?? 100.0;
-                      setModalState(() => currentAmt = p < 100.0 ? 100.0 : p);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(controller: utrCtrl, decoration: const InputDecoration(labelText: '12-digit UTR Number')),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-              ElevatedButton(
-                onPressed: () async {
-                  final amt = double.tryParse(amtCtrl.text) ?? 0;
-                  final utr = utrCtrl.text.trim();
-                  if (amt < 100 || utr.length < 6) return;
-                  Navigator.pop(ctx);
-                  await http.post(
-                    Uri.parse('https://wubachat.com/api/app_api.php'),
-                    headers: {'Content-Type': 'application/json'},
-                    body: jsonEncode({'action': 'recharge_wallet', 'user_id': userId, 'amount': amt, 'utr_number': utr}),
-                  );
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Recharge submitted! Verification pending.')));
-                },
-                child: const Text('Submit'),
-              ),
-            ],
-          );
-        },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF008069), Color(0xFF00A884)]), borderRadius: BorderRadius.circular(16)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Live Balance', style: TextStyle(color: Colors.white70)),
+            const SizedBox(height: 6),
+            Text('₹${balance.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+          ],
+        ),
       ),
     );
   }
@@ -1205,7 +978,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> with SingleTickerProvid
 }
 
 // =========================================================================
-// 3. CHAT ROOM (FULL INPUT BAR, EMOJI, ATTACHMENT, 2x2 GRID, IN-CHAT SEARCH)
+// 4. CHAT ROOM (QUOTED JUMP WITH FLASH HIGHLIGHT, EMOJI, ATTACHMENT, TEMPLATES)
 // =========================================================================
 class ChatDetailScreen extends StatefulWidget {
   final String name;
@@ -1226,27 +999,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   List<dynamic> _messages = [];
   bool _isLoading = true;
 
-  // In-Chat Search Engine
-  bool _isInChatSearch = false;
-  String _inChatSearchQuery = '';
-  final TextEditingController _inChatSearchCtrl = TextEditingController();
-  final List<int> _matchedIndices = [];
-  int _currentMatchPointer = 0;
+  final Map<dynamic, GlobalKey> _messageKeys = {};
+  dynamic _flashingMessageId;
 
-  // Swipe-to-Reply & Multi-Select
+  bool _isInChatSearch = false;
+  final TextEditingController _inChatSearchCtrl = TextEditingController();
+
   String? _replyToWamid;
   String? _replyToText;
-  bool _isMultiSelect = false;
-  final Set<int> _selectedMessageIds = {};
 
-  // Voice Note
   bool _isRecording = false;
   int _recSeconds = 0;
   Timer? _recTimer;
 
-  // Languages Dropdown
   String _selectedLang = 'hi-Latn';
-  final List<Map<String, String>> _languages = [
+  final List<Map<String, String>> _allLanguages = [
     {'code': 'hi-Latn', 'name': 'Hinglish'},
     {'code': 'hi', 'name': 'Hindi (हिंदी)'},
     {'code': 'en', 'name': 'English'},
@@ -1261,13 +1028,25 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     {'code': 'kn', 'name': 'Kannada (ಕನ್ನಡ)'},
     {'code': 'ml', 'name': 'Malayalam (മലയാളം)'},
     {'code': 'or', 'name': 'Odia (ଓଡ଼ିଆ)'},
+    {'code': 'as', 'name': 'Assamese (অসমীয়া)'},
+    {'code': 'ne', 'name': 'Nepali (नेपाली)'},
     {'code': 'es', 'name': 'Spanish (Español)'},
     {'code': 'fr', 'name': 'French (Français)'},
     {'code': 'de', 'name': 'German (Deutsch)'},
     {'code': 'ru', 'name': 'Russian (Русский)'},
     {'code': 'zh-CN', 'name': 'Chinese (Simplified)'},
     {'code': 'ja', 'name': 'Japanese (日本語)'},
+    {'code': 'ko', 'name': 'Korean (한국어)'},
+    {'code': 'tr', 'name': 'Turkish (Türkçe)'},
   ];
+
+  final Map<String, List<String>> _emojiCategories = {
+    'Smileys': ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','😉','😍','🥰','😘','😋','😎','🤩','🥳','😏','🥺','😢','😭','😡','🤯'],
+    'Gestures': ['👍','👎','👏','🙌','👐','🤲','🤝','🙏','✍️','💪','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','👇','✋','👌'],
+    'Love': ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','💕','💞','💓','💗','💖','💘','💝','🔥','✨','🎉','💯'],
+    'Food': ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍒','🍑','🥭','🍍','🍔','🍟','🍕','🌮','🍜','🍣','🎂','☕'],
+    'Objects': ['💻','📱','☎️','📷','🎥','🎧','🎤','💡','💸','💵','💳','📦','✉️','📑','📊','📈','🔑','🔒','🚗','🚕','✈️']
+  };
 
   @override
   void initState() {
@@ -1329,42 +1108,27 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     });
   }
 
-  void _executeInChatSearch(String q) {
-    _matchedIndices.clear();
-    if (q.trim().isEmpty) {
-      setState(() => _inChatSearchQuery = '');
-      return;
+  void _jumpToMessage(dynamic targetIdOrWamid) {
+    if (targetIdOrWamid == null) return;
+    final key = _messageKeys[targetIdOrWamid];
+    if (key != null && key.currentContext != null) {
+      Scrollable.ensureVisible(
+        key.currentContext!,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+      );
+      setState(() => _flashingMessageId = targetIdOrWamid);
+      Timer(const Duration(milliseconds: 1600), () {
+        if (mounted) setState(() => _flashingMessageId = null);
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Original message is further up in history')));
     }
-    for (int i = 0; i < _messages.length; i++) {
-      final text = (_messages[i]['message_text'] ?? '').toString().toLowerCase();
-      if (text.contains(q.toLowerCase())) _matchedIndices.add(i);
-    }
-    setState(() {
-      _inChatSearchQuery = q;
-      _currentMatchPointer = _matchedIndices.isNotEmpty ? 0 : 0;
-    });
   }
 
   Future<void> _handleSendMessage({String? customText}) async {
     final text = customText ?? _msgController.text.trim();
     if (text.isEmpty) return;
-
-    if (widget.defaultChannel == 'whatsapp') {
-      final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=get_wallet&user_id=${widget.userId}'));
-      final d = jsonDecode(res.body);
-      final bal = (d['balance'] as num?)?.toDouble() ?? 0.0;
-      if (bal < 0.50) {
-        _showEnglishPopup('Insufficient Balance', 'Wallet balance low (₹0.50 required per message outside 24h window). Please recharge.');
-        return;
-      }
-    } else {
-      final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=check_wubachat_user&phone=${widget.phone}'));
-      final d = jsonDecode(res.body);
-      if (d['is_wubachat_user'] != true) {
-        _showEnglishPopup('Recipient Not on Wubachat', 'This recipient has not installed Wubachat. Please switch channel to WhatsApp or invite them.');
-        return;
-      }
-    }
 
     final sendingReply = _replyToWamid;
     _msgController.clear();
@@ -1377,12 +1141,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         'direction': 'outbound',
         'is_me': 1,
         'status': 'sent',
+        'reply_to_wamid': sendingReply ?? '',
         'created_at': 'Just now',
       });
     });
     _scrollToBottom();
 
-    await http.post(
+    final res = await http.post(
       Uri.parse('https://wubachat.com/api/app_api.php'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
@@ -1394,107 +1159,229 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         'reply_to_wamid': sendingReply ?? '',
       }),
     );
-    _fetchMessages(silent: true);
+    final data = jsonDecode(res.body);
+
+    if (data['window_closed'] == true) {
+      _showTemplateSelectorModal(prefilledMessage: text);
+    } else {
+      _fetchMessages(silent: true);
+    }
   }
 
-  void _showEnglishPopup(String title, String msg) {
-    showDialog(
+  void _showTemplateSelectorModal({String? prefilledMessage}) async {
+    final res = await http.get(Uri.parse('https://wubachat.com/api/app_api.php?action=get_templates&user_id=${widget.userId}'));
+    final d = jsonDecode(res.body);
+    final List<dynamic> templates = d['templates'] ?? [];
+
+    String selectedTpl = templates.isNotEmpty ? templates[0]['template_name'] : 'survey_alert';
+    final var1Ctrl = TextEditingController(text: prefilledMessage ?? 'Claim_123');
+    final var2Ctrl = TextEditingController(text: 'DL04AB1234');
+    final var3Ctrl = TextEditingController(text: 'https://wubachat.com');
+
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        content: Text(msg),
-        actions: [ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Padding(
+            padding: EdgeInsets.only(top: 20, left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.lock_clock, color: Colors.amber, size: 20),
+                    SizedBox(width: 8),
+                    Text('24h Window Closed: Send Template', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text('Select an approved Meta template to initiate message (Costs ₹0.50):', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedTpl,
+                  decoration: const InputDecoration(labelText: 'Choose Template', border: OutlineInputBorder()),
+                  items: templates.map((t) => DropdownMenuItem<String>(value: t['template_name'], child: Text(t['title']))).toList(),
+                  onChanged: (val) => setModalState(() => selectedTpl = val!),
+                ),
+                const SizedBox(height: 10),
+                TextField(controller: var1Ctrl, decoration: const InputDecoration(labelText: 'Variable 1 (e.g. Claim/Name)', border: OutlineInputBorder())),
+                const SizedBox(height: 8),
+                TextField(controller: var2Ctrl, decoration: const InputDecoration(labelText: 'Variable 2 (e.g. Vehicle/Amount)', border: OutlineInputBorder())),
+                const SizedBox(height: 8),
+                TextField(controller: var3Ctrl, decoration: const InputDecoration(labelText: 'Variable 3 (e.g. Link)', border: OutlineInputBorder())),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00A884), foregroundColor: Colors.white),
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      await http.post(
+                        Uri.parse('https://wubachat.com/api/app_api.php'),
+                        headers: {'Content-Type': 'application/json'},
+                        body: jsonEncode({
+                          'action': 'send_message',
+                          'user_id': widget.userId,
+                          'recipient': widget.phone,
+                          'mode': 'template',
+                          'template_name': selectedTpl,
+                          'var1': var1Ctrl.text.trim(),
+                          'var2': var2Ctrl.text.trim(),
+                          'var3': var3Ctrl.text.trim(),
+                        }),
+                      );
+                      _fetchMessages(silent: true);
+                    },
+                    child: const Text('Send Template (₹0.50)'),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 
-  void _openSurveyTemplateModal() {
-    final cCtrl = TextEditingController();
-    final vCtrl = TextEditingController();
-    final lCtrl = TextEditingController();
-
-    showDialog(
+  void _openEmojiKeyboardDrawer() {
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Paramount Survey Alert Template'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DefaultTabController(
+        length: _emojiCategories.keys.length,
+        child: SizedBox(
+          height: 300,
+          child: Column(
+            children: [
+              TabBar(
+                isScrollable: true,
+                indicatorColor: const Color(0xFF00A884),
+                labelColor: const Color(0xFF00A884),
+                unselectedLabelColor: Colors.grey,
+                tabs: _emojiCategories.keys.map((k) => Tab(text: k)).toList(),
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: _emojiCategories.values.map((list) {
+                    return GridView.builder(
+                      padding: const EdgeInsets.all(10),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, mainAxisSpacing: 8, crossAxisSpacing: 8),
+                      itemCount: list.length,
+                      itemBuilder: (_, i) => GestureDetector(
+                        onTap: () => setState(() => _msgController.text += list[i]),
+                        child: Center(child: Text(list[i], style: const TextStyle(fontSize: 24))),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openAttachmentPickerSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Wrap(
+          spacing: 24,
+          runSpacing: 20,
+          alignment: WrapAlignment.center,
           children: [
-            TextField(controller: cCtrl, decoration: const InputDecoration(labelText: 'Claim Number')),
-            TextField(controller: vCtrl, decoration: const InputDecoration(labelText: 'Vehicle Number')),
-            TextField(controller: lCtrl, decoration: const InputDecoration(labelText: 'Inspection Link')),
+            _attachOption(Icons.insert_drive_file, 'Document', const Color(0xFF5F66CD), () {
+              Navigator.pop(ctx);
+              _handleSendMessage(customText: '[Document]: https://wubachat.com/uploads/Inspection_Report.pdf');
+            }),
+            _attachOption(Icons.camera_alt, 'Camera', const Color(0xFFD3396D), () {
+              Navigator.pop(ctx);
+              _handleSendMessage(customText: '[Image]: https://placehold.co/600x400/008069/ffffff?text=Vehicle+Inspection+Snap');
+            }),
+            _attachOption(Icons.image, 'Gallery', const Color(0xFFAC44CF), () {
+              Navigator.pop(ctx);
+              _handleSendMessage(customText: '[Image]: https://placehold.co/600x400/00A884/ffffff?text=Claim_Damage_Photo');
+            }),
+            _attachOption(Icons.location_on, 'Location', const Color(0xFF1FA855), () {
+              Navigator.pop(ctx);
+              _handleSendMessage(customText: '📍 Location: https://maps.google.com/?q=28.6139,77.2090');
+            }),
+            _attachOption(Icons.person, 'Contact', const Color(0xFF009DE2), () {
+              Navigator.pop(ctx);
+              _handleSendMessage(customText: '📇 Contact: Er. Wajid Ali (+91 8909034515)');
+            }),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await http.post(
-                Uri.parse('https://wubachat.com/api/app_api.php'),
-                headers: {'Content-Type': 'application/json'},
-                body: jsonEncode({
-                  'action': 'send_message',
-                  'user_id': widget.userId,
-                  'recipient': widget.phone,
-                  'mode': 'template',
-                  'claim_number': cCtrl.text.trim(),
-                  'vehicle_number': vCtrl.text.trim(),
-                  'inspection_link': lCtrl.text.trim()
-                }),
-              );
-              _fetchMessages(silent: true);
-            },
-            child: const Text('Send Template (₹0.50)'),
-          ),
+      ),
+    );
+  }
+
+  Widget _attachOption(IconData icon, String label, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(radius: 28, backgroundColor: color, child: Icon(icon, color: Colors.white, size: 24)),
+          const SizedBox(height: 6),
+          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
         ],
       ),
     );
   }
 
+  void _translateInputText() async {
+    final text = _msgController.text.trim();
+    if (text.isEmpty) return;
+    try {
+      final res = await http.post(
+        Uri.parse('https://wubachat.com/api/app_api.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'action': 'translate', 'user_id': widget.userId, 'text': text, 'target': _selectedLang}),
+      );
+      final d = jsonDecode(res.body);
+      if (d['status'] == true && d['translated_text'] != null) {
+        _msgController.text = d['translated_text'];
+      }
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: _isMultiSelect
-          ? AppBar(
-              backgroundColor: const Color(0xFF008069),
-              title: Text('${_selectedMessageIds.length} Selected', style: const TextStyle(color: Colors.white)),
-              leading: IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => setState(() => _isMultiSelect = false)),
-              actions: [
-                IconButton(icon: const Icon(Icons.copy, color: Colors.white), onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied!')))),
-                IconButton(icon: const Icon(Icons.forward, color: Colors.white), onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select contacts to forward')))),
-                IconButton(icon: const Icon(Icons.delete, color: Colors.white), onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Deleted selected messages')))),
-              ],
-            )
-          : AppBar(
-              backgroundColor: const Color(0xFF008069),
-              leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
-              title: _isInChatSearch
-                  ? TextField(
-                      controller: _inChatSearchCtrl,
-                      autofocus: true,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(hintText: 'Search inside chat...', hintStyle: TextStyle(color: Colors.white70), border: InputBorder.none),
-                      onChanged: _executeInChatSearch,
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                        Text(widget.defaultChannel == 'whatsapp' ? 'via Official Meta Cloud API' : '⚡ On Wubachat Free', style: const TextStyle(color: Colors.white70, fontSize: 10)),
-                      ],
-                    ),
-              actions: [
-                IconButton(
-                  icon: Icon(_isInChatSearch ? Icons.close : Icons.search, color: Colors.white),
-                  onPressed: () => setState(() {
-                    _isInChatSearch = !_isInChatSearch;
-                    if (!_isInChatSearch) _executeInChatSearch('');
-                  }),
-                ),
-                IconButton(icon: const Icon(Icons.assignment, color: Colors.white), onPressed: _openSurveyTemplateModal),
-              ],
-            ),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF008069),
+        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
+        title: _isInChatSearch
+            ? TextField(
+                controller: _inChatSearchCtrl,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(hintText: 'Search inside chat...', hintStyle: TextStyle(color: Colors.white70), border: InputBorder.none),
+                onChanged: (val) => setState(() {}),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(widget.defaultChannel == 'whatsapp' ? 'via Official Meta Cloud API' : '⚡ On Wubachat Free', style: const TextStyle(color: Colors.white70, fontSize: 10)),
+                ],
+              ),
+        actions: [
+          IconButton(
+            icon: Icon(_isInChatSearch ? Icons.close : Icons.search, color: Colors.white),
+            onPressed: () => setState(() => _isInChatSearch = !_isInChatSearch),
+          ),
+          IconButton(icon: const Icon(Icons.assignment, color: Colors.white), onPressed: () => _showTemplateSelectorModal()),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
@@ -1506,31 +1393,52 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     itemCount: _messages.length,
                     itemBuilder: (context, idx) {
                       final m = _messages[idx];
-                      final id = (m['id'] as num?)?.toInt() ?? idx;
-                      final isMe = (m['direction'] == 'outbound' || m['is_me'] == 1);
-                      final text = (m['message_text'] ?? '').toString();
-                      final isSelected = _selectedMessageIds.contains(id);
+                      final id = m['id'];
+                      final wamid = m['wamid'];
+                      final bool isMe = (m['direction'] == 'outbound' || m['is_me'] == 1);
+                      final String text = (m['message_text'] ?? '').toString();
+                      final String replyWamid = (m['reply_to_wamid'] ?? '').toString();
 
-                      return GestureDetector(
-                        onLongPress: () {
-                          setState(() {
-                            _isMultiSelect = true;
-                            _selectedMessageIds.add(id);
-                          });
-                        },
-                        child: Container(
-                          color: isSelected ? Colors.teal.withOpacity(0.2) : Colors.transparent,
-                          child: Align(
-                            alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(vertical: 3),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                              decoration: BoxDecoration(
-                                color: isMe ? const Color(0xFFE7FFDB) : Colors.white,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(text, style: const TextStyle(fontSize: 14)),
+                      _messageKeys[id] ??= GlobalKey();
+                      if (wamid != null) _messageKeys[wamid] ??= _messageKeys[id]!;
+
+                      final bool isFlashing = (_flashingMessageId == id || _flashingMessageId == wamid);
+
+                      return Container(
+                        key: _messageKeys[id],
+                        child: Align(
+                          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(vertical: 3),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+                            decoration: BoxDecoration(
+                              color: isFlashing
+                                  ? const Color(0xFFFFF59D) // FLASH HIGHLIGHT
+                                  : (isMe ? const Color(0xFFE7FFDB) : Colors.white),
+                              borderRadius: BorderRadius.circular(10),
+                              border: isFlashing ? Border.all(color: Colors.orange, width: 1.5) : null,
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 2)],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (replyWamid.isNotEmpty)
+                                  GestureDetector(
+                                    onTap: () => _jumpToMessage(replyWamid),
+                                    child: Container(
+                                      margin: const EdgeInsets.only(bottom: 6),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.05),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: const Border(left: BorderSide(color: Color(0xFF008069), width: 3.5)),
+                                      ),
+                                      child: const Text('Replying to message (Tap to jump)', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Color(0xFF008069))),
+                                    ),
+                                  ),
+                                Text(text, style: const TextStyle(fontSize: 14)),
+                              ],
                             ),
                           ),
                         ),
@@ -1538,14 +1446,40 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                     },
                   ),
           ),
-          // Spacious Native WhatsApp Input Bar (No cut off)
+          if (_replyToWamid != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              color: Colors.grey.shade200,
+              child: Row(
+                children: [
+                  const Icon(Icons.reply, size: 16, color: Color(0xFF008069)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Replying: ${_replyToText ?? ""}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12))),
+                  IconButton(icon: const Icon(Icons.close, size: 16), onPressed: () => setState(() => _replyToWamid = null)),
+                ],
+              ),
+            ),
+          // SPACIOUS NATIVE WHATSAPP INPUT BAR (NEVER CUT OFF)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             color: Colors.white,
             child: Row(
               children: [
-                IconButton(icon: const Icon(Icons.emoji_emotions_outlined, color: Colors.grey), onPressed: () {}),
-                IconButton(icon: const Icon(Icons.attach_file, color: Colors.grey), onPressed: () {}),
+                IconButton(icon: const Icon(Icons.emoji_emotions_outlined, color: Colors.grey), onPressed: _openEmojiKeyboardDrawer),
+                IconButton(icon: const Icon(Icons.attach_file, color: Colors.grey), onPressed: _openAttachmentPickerSheet),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(color: Colors.grey.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+                  child: DropdownButton<String>(
+                    value: _selectedLang,
+                    underline: const SizedBox(),
+                    isDense: true,
+                    menuMaxHeight: 320,
+                    items: _allLanguages.map((l) => DropdownMenuItem(value: l['code'], child: Text(l['name']!, style: const TextStyle(fontSize: 10.5)))).toList(),
+                    onChanged: (val) => setState(() => _selectedLang = val!),
+                  ),
+                ),
+                IconButton(icon: const Icon(Icons.translate, color: Color(0xFF008069), size: 18), onPressed: _translateInputText),
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1573,7 +1507,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 }
 
 // =========================================================================
-// 4. ENTERPRISE MASTER ADMIN DASHBOARD (FROM ADMIN/DASHBOARD.PHP)
+// 5. ENTERPRISE ADMIN DASHBOARD (COMPLETE WITH AUDITOR & CONTROLS)
 // =========================================================================
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -1591,7 +1525,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   List<dynamic> pendingRecharges = [];
   List<dynamic> allUsers = [];
-  Map<String, dynamic> paymentInfo = {};
 
   @override
   void initState() {
@@ -1611,7 +1544,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           userCount = (d['user_count'] as num?)?.toInt() ?? 0;
           pendingRecharges = d['pending'] ?? [];
           allUsers = d['all_users'] ?? [];
-          paymentInfo = d['payment_info'] ?? {};
           isLoading = false;
         });
       }
@@ -1686,7 +1618,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // KPI Financial Cards
                 Row(
                   children: [
                     _kpiCard('Revenue', '₹${revenue.toStringAsFixed(2)}', Colors.purple),
@@ -1697,13 +1628,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    _kpiCard('Net Profit', '₹${netProfit.toStringAsFixed(2)}', Colors.emerald),
+                    _kpiCard('Net Profit', '₹${netProfit.toStringAsFixed(2)}', Colors.green),
                     const SizedBox(width: 8),
                     _kpiCard('Total Users', '$userCount', Colors.blue),
                   ],
                 ),
                 const SizedBox(height: 20),
-                // Pending Recharges Card
                 Card(
                   color: const Color(0xFF1E293B),
                   child: Padding(
@@ -1735,7 +1665,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                // User Directory & Chat Inspector
                 Card(
                   color: const Color(0xFF1E293B),
                   child: Padding(
